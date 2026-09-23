@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 import { drawGem, type RarityPreset, type SigilDef } from './gem';
 import { drawEmptySlot } from './slot';
 import { drawNightSkyGlow, drawStarField } from './background';
+import { drawShadowMonster, type MonsterVisual } from './monster';
 
 export function createGemTexture(
   scene: Phaser.Scene,
@@ -40,6 +41,17 @@ export function createNightSkyGlowTexture(scene: Phaser.Scene, key: string, size
 
   const ctx = canvasTexture.getContext();
   drawNightSkyGlow(ctx, size);
+  canvasTexture.refresh();
+}
+
+export function createMonsterTexture(scene: Phaser.Scene, key: string, size: number, visual: MonsterVisual): void {
+  if (scene.textures.exists(key)) return;
+
+  const canvasTexture = scene.textures.createCanvas(key, size, size);
+  if (!canvasTexture) return;
+
+  const ctx = canvasTexture.getContext();
+  drawShadowMonster(ctx, size, visual);
   canvasTexture.refresh();
 }
 

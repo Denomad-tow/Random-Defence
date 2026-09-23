@@ -72,6 +72,9 @@ export class GameScene extends Phaser.Scene {
   private spawnTimer!: Phaser.Time.TimerEvent;
   private gameOver = false;
   private bestStage = 0;
+  private pendingSummon?: PlacedUnit;
+  private pendingSummonPreEconomy?: EconomyState;
+  private placementHighlights: Phaser.GameObjects.Arc[] = [];
 
   constructor() {
     super('game');
@@ -84,6 +87,9 @@ export class GameScene extends Phaser.Scene {
     this.enhanceLevels = new Map();
     this.gameOver = false;
     this.bestStage = loadBestStage();
+    this.pendingSummon = undefined;
+    this.pendingSummonPreEconomy = undefined;
+    this.placementHighlights = [];
 
     this.layout();
     this.scale.on('resize', () => this.layout());
@@ -92,6 +98,25 @@ export class GameScene extends Phaser.Scene {
       loop: true,
       callback: () => this.spawnMonster(),
     });
+
+    this.input.on('dragstart', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+      gameObject.setData('dragMoved', true);
+      this.children.bringToTop(gameObject);
+    });
+
+    this.input.on(
+      'drag',
+      (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.Image, dragX: number, dragY: number) => {
+        gameObject.setPosition(dragX, dragY);
+      },
+    );
+
+    this.input.on(
+      'dragend',
+      (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+        this.handleUnitDrop(gameObject, pointer);
+      },
+    );
   }
 
   update(_time: number, delta: number): void {
@@ -486,6 +511,8 @@ export class GameScene extends Phaser.Scene {
     this.drawSummonButton(width / 2, buttonY);
     this.refreshMana();
 
+    this.placementHighlights = [];
+    if (this.pendingSummon) this.enterPlacementMode();
     if (this.gameOver) this.showGameOverOverlay();
   }
 
@@ -498,7 +525,9 @@ export class GameScene extends Phaser.Scene {
 
   private refreshMana(): void {
     this.manaText?.setText(`마나 ${this.economy.mana}`);
-    this.summonButtonText?.setText(`소환 (${currentSummonCost(this.economy)}마나)`);
+    this.summonButtonText?.setText(
+      this.pendingSummon ? '놓을 칸 선택 (취소)' : `소환 (${currentSummonCost(this.economy)}마나)`,
+    );
   }
 
   private drawBackground(width: number, height: number): void {
@@ -547,12 +576,15 @@ export class GameScene extends Phaser.Scene {
     graphics.strokePath();
   }
 
-  private drawFieldSlots(cells: { x: number; y: number }[], cellSize: number): void {
+  private drawFieldSlots(cells: CellPosition[], cellSize: number): void {
     const slotKey = `slot-${Math.round(cellSize)}`;
     createSlotTexture(this, slotKey, Math.round(cellSize));
 
     cells.forEach((cell) => {
-      this.add.image(cell.x, cell.y, slotKey);
+      this.add
+        .image(cell.x, cell.y, slotKey)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.handleCellTap(cell));
     });
   }
 
@@ -570,7 +602,12 @@ export class GameScene extends Phaser.Scene {
       .image(cell.x, cell.y, key)
       .setDisplaySize(this.cellSize * 0.86, this.cellSize * 0.86)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.tryEnhance(index));
+      .on('pointerdown', () => sprite.setData('dragMoved', false))
+      .on('pointerup', () => {
+        if (!sprite.getData('dragMoved')) this.tryEnhance(index);
+      });
+    sprite.setData('cellIndex', index);
+    this.input.setDraggable(sprite);
 
     const level = this.enhanceLevels.get(placed.unit.id) ?? 0;
     const labelText = level > 0 ? `${'★'.repeat(placed.star)} · 강화${level}` : '★'.repeat(placed.star);
@@ -619,6 +656,109 @@ export class GameScene extends Phaser.Scene {
     this.spawnFloatingText(cell.x, cell.y, `강화 Lv.${level + 1}!`, '#ffd98a');
   }
 
+  private handleCellTap(cell: CellPosition): void {
+    if (!this.pendingSummon) return;
+
+    const index = cellIndex(cell.row, cell.col);
+    if (this.placedUnits.has(index)) return;
+
+    this.placedUnits.set(index, this.pendingSummon);
+    this.drawUnitSprite(cell, this.pendingSummon);
+
+    this.pendingSummon = undefined;
+    this.pendingSummonPreEconomy = undefined;
+    this.clearPlacementHighlights();
+    this.refreshMana();
+  }
+
+  private findNearestCell(x: number, y: number): CellPosition | null {
+    let nearest: CellPosition | null = null;
+    let nearestDist = Infinity;
+
+    this.boardCells.forEach((cell) => {
+      const dist = Phaser.Math.Distance.Between(x, y, cell.x, cell.y);
+      if (dist <= this.cellSize * 0.6 && dist < nearestDist) {
+        nearest = cell;
+        nearestDist = dist;
+      }
+    });
+
+    return nearest;
+  }
+
+  private handleUnitDrop(gameObject: Phaser.GameObjects.GameObject, pointer: Phaser.Input.Pointer): void {
+    const sourceIndex = gameObject.getData('cellIndex') as number;
+    const sourcePlaced = this.placedUnits.get(sourceIndex);
+    const sourceCell = this.boardCells.find((c) => cellIndex(c.row, c.col) === sourceIndex);
+    if (!sourcePlaced || !sourceCell) return;
+
+    const targetCell = this.findNearestCell(pointer.x, pointer.y);
+    if (!targetCell) {
+      this.drawUnitSprite(sourceCell, sourcePlaced);
+      return;
+    }
+
+    const targetIndex = cellIndex(targetCell.row, targetCell.col);
+    if (targetIndex === sourceIndex) {
+      this.drawUnitSprite(sourceCell, sourcePlaced);
+      return;
+    }
+
+    const targetPlaced = this.placedUnits.get(targetIndex);
+
+    this.placedUnits.set(targetIndex, sourcePlaced);
+    if (targetPlaced) {
+      this.placedUnits.set(sourceIndex, targetPlaced);
+    } else {
+      this.placedUnits.delete(sourceIndex);
+    }
+
+    this.drawUnitSprite(targetCell, sourcePlaced);
+    if (targetPlaced) {
+      this.drawUnitSprite(sourceCell, targetPlaced);
+    }
+  }
+
+  private enterPlacementMode(): void {
+    this.clearPlacementHighlights();
+
+    this.boardCells.forEach((cell) => {
+      const index = cellIndex(cell.row, cell.col);
+      if (this.placedUnits.has(index)) return;
+
+      const ring = this.add.circle(cell.x, cell.y, this.cellSize * 0.48, 0xffd98a, 0.16);
+      ring.setStrokeStyle(px(2), 0xffd98a, 0.9);
+
+      this.tweens.add({
+        targets: ring,
+        alpha: { from: 0.9, to: 0.35 },
+        duration: 500,
+        yoyo: true,
+        repeat: -1,
+      });
+
+      this.placementHighlights.push(ring);
+    });
+  }
+
+  private clearPlacementHighlights(): void {
+    this.placementHighlights.forEach((ring) => ring.destroy());
+    this.placementHighlights = [];
+  }
+
+  private cancelPendingSummon(): void {
+    if (!this.pendingSummon) return;
+
+    this.pendingSummon = undefined;
+    if (this.pendingSummonPreEconomy) {
+      this.economy = this.pendingSummonPreEconomy;
+      this.pendingSummonPreEconomy = undefined;
+    }
+
+    this.clearPlacementHighlights();
+    this.refreshMana();
+  }
+
   private drawSummonButton(x: number, y: number): void {
     const buttonWidth = Math.min(this.cellSize * 3.4, this.scale.width * 0.7);
     const buttonHeight = this.cellSize * 0.9;
@@ -653,19 +793,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   private trySummon(): void {
+    if (this.pendingSummon) {
+      this.cancelPendingSummon();
+      return;
+    }
+
     if (!canAffordSummon(this.economy)) return;
 
-    const emptyCell = this.boardCells.find((cell) => !this.placedUnits.has(cellIndex(cell.row, cell.col)));
-    if (!emptyCell) return;
+    const hasEmptyCell = this.boardCells.some((cell) => !this.placedUnits.has(cellIndex(cell.row, cell.col)));
+    if (!hasEmptyCell) return;
 
+    this.pendingSummonPreEconomy = this.economy;
     this.economy = spendForSummon(this.economy);
 
     const unit = pickRandomUnit(NORMAL_UNITS);
-    const placed: PlacedUnit = { unit, star: 1, cooldown: Math.random() * 0.3 };
-    this.placedUnits.set(cellIndex(emptyCell.row, emptyCell.col), placed);
-    this.drawUnitSprite(emptyCell, placed);
+    this.pendingSummon = { unit, star: 1, cooldown: Math.random() * 0.3 };
 
     this.refreshMana();
+    this.enterPlacementMode();
   }
 
   private spawnMonster(): void {

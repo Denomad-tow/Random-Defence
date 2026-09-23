@@ -1,0 +1,82 @@
+[
+  {
+    "id": "single_normal",
+    "name": "창술 견습생",
+    "rarity": "normal",
+    "role": "single",
+    "attack": 18,
+    "attackSpeed": 0.9,
+    "range": 2,
+    "effects": []
+  },
+  {
+    "id": "aoe_normal",
+    "name": "화염 견습생",
+    "rarity": "normal",
+    "role": "aoe",
+    "attack": 8,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "aoe", "radius": 1 }]
+  },
+  {
+    "id": "slow_normal",
+    "name": "서리 견습생",
+    "rarity": "normal",
+    "role": "slow",
+    "attack": 10,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "slow", "value": 0.2, "duration": 1.5 }]
+  },
+  {
+    "id": "stun_normal",
+    "name": "벼락 견습생",
+    "rarity": "normal",
+    "role": "stun",
+    "attack": 9,
+    "attackSpeed": 0.8,
+    "range": 1,
+    "effects": [{ "type": "stun", "chance": 0.15, "duration": 1.0 }]
+  },
+  {
+    "id": "poison_normal",
+    "name": "맹독 견습생",
+    "rarity": "normal",
+    "role": "poison",
+    "attack": 6,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "poison", "value": 4, "duration": 3 }]
+  },
+  {
+    "id": "armorBreak_normal",
+    "name": "파쇄 견습생",
+    "rarity": "normal",
+    "role": "armorBreak",
+    "attack": 9,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "armorBreak", "value": 0.15, "duration": 2 }]
+  },
+  {
+    "id": "buff_normal",
+    "name": "찬가 견습생",
+    "rarity": "normal",
+    "role": "buff",
+    "attack": 4,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "buff", "stat": "attackSpeed", "value": 0.15 }]
+  },
+  {
+    "id": "goldGen_normal",
+    "name": "연금 견습생",
+    "rarity": "normal",
+    "role": "goldGen",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 0,
+    "effects": [{ "type": "goldGen", "value": 2, "interval": 2 }]
+  }
+]

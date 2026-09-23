@@ -50,3 +50,7 @@ export function getCellPositions(layout: BoardLayout): CellPosition[] {
 
   return positions;
 }
+
+export function cellIndex(row: number, col: number): number {
+  return row * FIELD_COLS + col;
+}

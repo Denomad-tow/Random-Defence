@@ -42,6 +42,7 @@ import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
+const FIRST_SPAWN_DELAY_MS = 10000;
 const MAX_MONSTERS_ON_FIELD = 100;
 const NORMAL_RARITY = RARITIES.find((r) => r.key === 'normal')!;
 
@@ -69,7 +70,8 @@ export class GameScene extends Phaser.Scene {
   private hudText!: Phaser.GameObjects.Text;
   private manaText!: Phaser.GameObjects.Text;
   private summonButtonText!: Phaser.GameObjects.Text;
-  private spawnTimer!: Phaser.Time.TimerEvent;
+  private spawnTimer?: Phaser.Time.TimerEvent;
+  private firstSpawnTimer?: Phaser.Time.TimerEvent;
   private gameOver = false;
   private bestStage = 0;
   private pendingSummon?: PlacedUnit;
@@ -105,10 +107,13 @@ export class GameScene extends Phaser.Scene {
 
     this.layout();
     this.scale.on('resize', () => this.layout());
-    this.spawnTimer = this.time.addEvent({
-      delay: SPAWN_INTERVAL_MS,
-      loop: true,
-      callback: () => this.spawnMonster(),
+    this.firstSpawnTimer = this.time.delayedCall(FIRST_SPAWN_DELAY_MS, () => {
+      this.spawnMonster();
+      this.spawnTimer = this.time.addEvent({
+        delay: SPAWN_INTERVAL_MS,
+        loop: true,
+        callback: () => this.spawnMonster(),
+      });
     });
 
     this.input.on('dragstart', (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
@@ -146,7 +151,8 @@ export class GameScene extends Phaser.Scene {
   private triggerGameOver(): void {
     if (this.gameOver) return;
     this.gameOver = true;
-    this.spawnTimer.paused = true;
+    this.firstSpawnTimer?.remove();
+    if (this.spawnTimer) this.spawnTimer.paused = true;
     this.bestStage = saveBestStage(this.waveState.stage);
     this.showGameOverOverlay();
   }
@@ -737,8 +743,8 @@ export class GameScene extends Phaser.Scene {
       targetPlaced.star === sourcePlaced.star &&
       sourcePlaced.star < MAX_STAR;
 
-    if (canMerge) {
-      this.mergeUnits(sourceIndex, sourceCell, targetIndex, targetCell, sourcePlaced.star);
+    if (canMerge && targetPlaced) {
+      this.mergeUnits(sourceIndex, sourcePlaced, targetIndex, targetPlaced, sourceCell, targetCell);
       return;
     }
 
@@ -757,18 +763,24 @@ export class GameScene extends Phaser.Scene {
 
   private mergeUnits(
     sourceIndex: number,
-    sourceCell: CellPosition,
+    sourcePlaced: PlacedUnit,
     targetIndex: number,
+    targetPlaced: PlacedUnit,
+    sourceCell: CellPosition,
     targetCell: CellPosition,
-    fromStar: number,
   ): void {
+    sourcePlaced.sprite?.destroy();
+    sourcePlaced.label?.destroy();
+    targetPlaced.sprite?.destroy();
+    targetPlaced.label?.destroy();
+
     this.placedUnits.delete(sourceIndex);
     this.placedUnits.delete(targetIndex);
 
     const resultUnit = pickRandomUnit(this.deckPool());
     const result: PlacedUnit = {
       unit: resultUnit,
-      star: Math.min(MAX_STAR, fromStar + 1),
+      star: Math.min(MAX_STAR, sourcePlaced.star + 1),
       cooldown: Math.random() * 0.3,
     };
     this.placedUnits.set(targetIndex, result);

@@ -28,6 +28,7 @@ import {
   type EconomyState,
 } from '../core/economy';
 import { enhanceCost, canEnhance, statMultiplier, MAX_ENHANCE_LEVEL } from '../core/enhancement';
+import { loadBestStage, saveBestStage } from '../meta/progress';
 import { RARITIES } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -41,6 +42,7 @@ import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
+const MAX_MONSTERS_ON_FIELD = 100;
 const NORMAL_RARITY = RARITIES.find((r) => r.key === 'normal')!;
 
 interface PlacedUnit {
@@ -67,21 +69,100 @@ export class GameScene extends Phaser.Scene {
   private hudText!: Phaser.GameObjects.Text;
   private manaText!: Phaser.GameObjects.Text;
   private summonButtonText!: Phaser.GameObjects.Text;
+  private spawnTimer!: Phaser.Time.TimerEvent;
+  private gameOver = false;
+  private bestStage = 0;
 
   constructor() {
     super('game');
   }
 
   create(): void {
+    this.waveState = createInitialWaveState();
+    this.economy = createInitialEconomy();
+    this.placedUnits = new Map();
+    this.enhanceLevels = new Map();
+    this.gameOver = false;
+    this.bestStage = loadBestStage();
+
     this.layout();
     this.scale.on('resize', () => this.layout());
-    this.time.addEvent({ delay: SPAWN_INTERVAL_MS, loop: true, callback: () => this.spawnMonster() });
+    this.spawnTimer = this.time.addEvent({
+      delay: SPAWN_INTERVAL_MS,
+      loop: true,
+      callback: () => this.spawnMonster(),
+    });
   }
 
   update(_time: number, delta: number): void {
+    if (this.gameOver) return;
+
     const dt = delta / 1000;
     this.updateMonsters(dt);
     this.updateCombat(dt);
+
+    if (this.monsters.length >= MAX_MONSTERS_ON_FIELD) {
+      this.triggerGameOver();
+    }
+  }
+
+  private triggerGameOver(): void {
+    if (this.gameOver) return;
+    this.gameOver = true;
+    this.spawnTimer.paused = true;
+    this.bestStage = saveBestStage(this.waveState.stage);
+    this.showGameOverOverlay();
+  }
+
+  private showGameOverOverlay(): void {
+    const { width, height } = this.scale;
+
+    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(1000);
+
+    this.add
+      .text(width / 2, height * 0.38, '패배', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(36)}px`,
+        color: '#ff6b6b',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001);
+
+    this.add
+      .text(width / 2, height * 0.46, `도달 스테이지 ${this.waveState.stage} · 최고 기록 ${this.bestStage}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(14)}px`,
+        color: '#f6e6b4',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001);
+
+    const buttonWidth = Math.min(this.cellSize * 3.4, width * 0.6);
+    const buttonHeight = this.cellSize * 0.9;
+    const buttonY = height * 0.56;
+
+    const bg = this.add.graphics().setDepth(1001);
+    bg.fillStyle(0x151a28, 1);
+    bg.fillRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(10));
+    bg.lineStyle(px(2), 0xd4b36a, 1);
+    bg.strokeRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(10));
+
+    this.add
+      .text(width / 2, buttonY, '다시 시작', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(16)}px`,
+        color: '#f6e6b4',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001);
+
+    this.add
+      .zone(width / 2, buttonY, buttonWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(1001)
+      .on('pointerdown', () => this.scene.restart());
   }
 
   private updateMonsters(dt: number): void {
@@ -404,14 +485,15 @@ export class GameScene extends Phaser.Scene {
     const buttonY = Math.min(height * 0.92, fieldTop + fieldAreaHeight + boardLayout.cellSize * 1.1);
     this.drawSummonButton(width / 2, buttonY);
     this.refreshMana();
+
+    if (this.gameOver) this.showGameOverOverlay();
   }
 
   private refreshHud(): void {
     const isBossStage = this.waveState.stage % 10 === 0;
-    const label = isBossStage
-      ? `초록 숲 · ${this.waveState.stage}스테이지 · 보스 웨이브`
-      : `초록 숲 · ${this.waveState.stage}스테이지 · ${this.waveState.spawnedInStage}/10`;
-    this.hudText?.setText(label);
+    const progress = isBossStage ? '보스 웨이브' : `${this.waveState.spawnedInStage}/10`;
+    const bestSuffix = this.bestStage > 0 ? ` (최고 ${this.bestStage})` : '';
+    this.hudText?.setText(`초록 숲 · ${this.waveState.stage}스테이지 · ${progress}${bestSuffix}`);
   }
 
   private refreshMana(): void {

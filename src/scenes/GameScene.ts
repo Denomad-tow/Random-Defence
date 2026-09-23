@@ -68,7 +68,7 @@ export class GameScene extends Phaser.Scene {
   private enhanceLevels = new Map<string, number>();
   private monsters: Phaser.GameObjects.Image[] = [];
   private hudText!: Phaser.GameObjects.Text;
-  private manaText!: Phaser.GameObjects.Text;
+  private statusText!: Phaser.GameObjects.Text;
   private summonButtonText!: Phaser.GameObjects.Text;
   private spawnTimer?: Phaser.Time.TimerEvent;
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
@@ -434,12 +434,11 @@ export class GameScene extends Phaser.Scene {
     const reward = MONSTER_KINDS[kindId]?.manaReward ?? 1;
 
     this.economy = { ...this.economy, mana: this.economy.mana + reward };
-    this.refreshMana();
-
     this.spawnDeathBurst(target.x, target.y);
 
     this.monsters = this.monsters.filter((m) => m !== target);
     target.destroy();
+    this.refreshMana();
   }
 
   private spawnFloatingText(x: number, y: number, message: string, color: string): void {
@@ -495,9 +494,14 @@ export class GameScene extends Phaser.Scene {
     this.boardCells = getCellPositions(boardLayout);
     this.cellSize = boardLayout.cellSize;
     this.boardStep = boardLayout.cellSize + boardLayout.gap;
-    this.fieldBottomY = boardLayout.originY + (FIELD_ROWS - 1) * this.boardStep + boardLayout.cellSize * 0.55;
     this.fieldLeftX = boardLayout.originX - boardLayout.cellSize * 0.5;
     this.fieldRightX = boardLayout.originX + (FIELD_COLS - 1) * this.boardStep + boardLayout.cellSize * 0.5;
+
+    const buttonY = Math.min(height * 0.92, fieldTop + fieldAreaHeight + boardLayout.cellSize * 1.1);
+    const buttonHeight = boardLayout.cellSize * 0.9;
+    const naturalFieldBottomY =
+      boardLayout.originY + (FIELD_ROWS - 1) * this.boardStep + boardLayout.cellSize * 0.55;
+    this.fieldBottomY = Math.min(naturalFieldBottomY, buttonY - buttonHeight / 2 - boardLayout.cellSize * 0.35);
 
     const boardWidth = boardLayout.cellSize * FIELD_COLS + boardLayout.gap * (FIELD_COLS - 1);
     const laneWidth = Math.min(boardWidth * 1.15, width * 0.9);
@@ -517,15 +521,23 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.hudText = this.add
-      .text(width / 2, headerHeight / 2, '', {
+      .text(width / 2, headerHeight * 0.4, '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(15)}px`,
+        fontSize: `${px(14)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5);
     this.refreshHud();
 
-    const buttonY = Math.min(height * 0.92, fieldTop + fieldAreaHeight + boardLayout.cellSize * 1.1);
+    this.statusText = this.add
+      .text(width / 2, headerHeight * 0.78, '', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#f6e6b4',
+      })
+      .setOrigin(0.5);
+    this.refreshStatus();
+
     this.drawSummonButton(width / 2, buttonY);
     this.refreshMana();
 
@@ -542,10 +554,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshMana(): void {
-    this.manaText?.setText(`마나 ${this.economy.mana}`);
     this.summonButtonText?.setText(
       this.pendingSummon ? '놓을 칸 선택 (취소)' : `소환 (${currentSummonCost(this.economy)}마나)`,
     );
+    this.refreshStatus();
+  }
+
+  private refreshStatus(): void {
+    this.statusText?.setText(`마나 ${this.economy.mana} · 몬스터 ${this.monsters.length}/${MAX_MONSTERS_ON_FIELD}`);
   }
 
   private drawBackground(width: number, height: number): void {
@@ -897,14 +913,6 @@ export class GameScene extends Phaser.Scene {
       .zone(x, y, buttonWidth, buttonHeight)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.trySummon());
-
-    this.manaText = this.add
-      .text(x, y - buttonHeight / 2 - px(14), '', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color: '#9a917d',
-      })
-      .setOrigin(0.5);
   }
 
   private trySummon(): void {
@@ -951,6 +959,7 @@ export class GameScene extends Phaser.Scene {
     monster.setData('kind', kind.id);
 
     this.monsters.push(monster);
+    this.refreshStatus();
 
     if (result.kind === 'boss') {
       this.announceBoss();

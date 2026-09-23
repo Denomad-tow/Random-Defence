@@ -27,6 +27,7 @@ import {
   spendForSummon,
   type EconomyState,
 } from '../core/economy';
+import { enhanceCost, canEnhance, statMultiplier, MAX_ENHANCE_LEVEL } from '../core/enhancement';
 import { RARITIES } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -46,6 +47,8 @@ interface PlacedUnit {
   unit: UnitDef;
   star: number;
   cooldown: number;
+  sprite?: Phaser.GameObjects.Image;
+  label?: Phaser.GameObjects.Text;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -59,6 +62,7 @@ export class GameScene extends Phaser.Scene {
   private waveState: WaveState = createInitialWaveState();
   private economy: EconomyState = createInitialEconomy();
   private placedUnits = new Map<number, PlacedUnit>();
+  private enhanceLevels = new Map<string, number>();
   private monsters: Phaser.GameObjects.Image[] = [];
   private hudText!: Phaser.GameObjects.Text;
   private manaText!: Phaser.GameObjects.Text;
@@ -148,7 +152,10 @@ export class GameScene extends Phaser.Scene {
 
       const bonus = buffBonuses.get(index) ?? 0;
       placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
-      this.performAttack(cell, target, placed.unit);
+
+      const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
+      const attack = Math.round(placed.unit.attack * statMultiplier(enhanceLevel));
+      this.performAttack(cell, target, placed.unit, attack);
     });
   }
 
@@ -162,7 +169,8 @@ export class GameScene extends Phaser.Scene {
       if (!bufferCell) return;
 
       const effect = buffer.unit.effects.find((e) => e.type === 'buff');
-      const value = (effect?.value as number) ?? 0;
+      const enhanceLevel = this.enhanceLevels.get(buffer.unit.id) ?? 0;
+      const value = ((effect?.value as number) ?? 0) * statMultiplier(enhanceLevel);
       const rangePx = buffer.unit.range * this.boardStep;
 
       this.placedUnits.forEach((_ally, allyIndex) => {
@@ -182,7 +190,8 @@ export class GameScene extends Phaser.Scene {
   private performGoldGen(cell: CellPosition, placed: PlacedUnit): void {
     const effect = placed.unit.effects[0];
     const interval = (effect?.interval as number) ?? 2;
-    const value = (effect?.value as number) ?? 1;
+    const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
+    const value = Math.round(((effect?.value as number) ?? 1) * statMultiplier(enhanceLevel));
 
     placed.cooldown = interval;
     this.economy = { ...this.economy, mana: this.economy.mana + value };
@@ -206,7 +215,12 @@ export class GameScene extends Phaser.Scene {
     return nearest;
   }
 
-  private performAttack(cell: CellPosition, target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
+  private performAttack(
+    cell: CellPosition,
+    target: Phaser.GameObjects.Image,
+    unitDef: UnitDef,
+    attack: number,
+  ): void {
     const color = ROLE_ATTACK_COLORS[unitDef.role] ?? 0xffffff;
     const targetX = target.x;
     const targetY = target.y;
@@ -221,13 +235,13 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => {
         projectile.destroy();
         if (!target.active) return;
-        this.applyUnitHit(target, unitDef);
+        this.applyUnitHit(target, unitDef, attack);
       },
     });
   }
 
-  private applyUnitHit(target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
-    this.dealDamage(target, unitDef.attack, '#fff5d6');
+  private applyUnitHit(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number): void {
+    this.dealDamage(target, attack, '#fff5d6');
     if (!target.active) return;
 
     this.applyRoleEffect(target, unitDef);
@@ -239,7 +253,7 @@ export class GameScene extends Phaser.Scene {
       this.monsters.forEach((other) => {
         if (other === target || !other.active) return;
         if (Phaser.Math.Distance.Between(target.x, target.y, other.x, other.y) <= radius) {
-          this.dealDamage(other, unitDef.attack, '#fff5d6');
+          this.dealDamage(other, attack, '#fff5d6');
         }
       });
     }
@@ -461,19 +475,66 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawUnitSprite(cell: CellPosition, placed: PlacedUnit): void {
+    placed.sprite?.destroy();
+    placed.label?.destroy();
+
     const size = Math.round(this.cellSize * 0.86);
     const sigil = ROLE_SIGILS[placed.unit.role];
     const key = `unit-${placed.unit.rarity}-${placed.unit.role}-${size}`;
     createGemTexture(this, key, NORMAL_RARITY, sigil, 1, size);
 
-    this.add.image(cell.x, cell.y, key).setDisplaySize(this.cellSize * 0.86, this.cellSize * 0.86);
-    this.add
-      .text(cell.x, cell.y + this.cellSize * 0.4, '★'.repeat(placed.star), {
+    const index = cellIndex(cell.row, cell.col);
+    const sprite = this.add
+      .image(cell.x, cell.y, key)
+      .setDisplaySize(this.cellSize * 0.86, this.cellSize * 0.86)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.tryEnhance(index));
+
+    const level = this.enhanceLevels.get(placed.unit.id) ?? 0;
+    const labelText = level > 0 ? `${'★'.repeat(placed.star)} · 강화${level}` : '★'.repeat(placed.star);
+    const label = this.add
+      .text(cell.x, cell.y + this.cellSize * 0.4, labelText, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(11)}px`,
         color: '#f3dc9a',
       })
       .setOrigin(0.5);
+
+    placed.sprite = sprite;
+    placed.label = label;
+  }
+
+  private tryEnhance(index: number): void {
+    const placed = this.placedUnits.get(index);
+    if (!placed) return;
+
+    const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
+    if (!cell) return;
+
+    const level = this.enhanceLevels.get(placed.unit.id) ?? 0;
+
+    if (!canEnhance(level)) {
+      this.spawnFloatingText(cell.x, cell.y, `최대 강화(Lv.${MAX_ENHANCE_LEVEL})`, '#9a917d');
+      return;
+    }
+
+    const cost = enhanceCost(level);
+    if (this.economy.mana < cost) {
+      this.spawnFloatingText(cell.x, cell.y, '마나 부족', '#ff8a8a');
+      return;
+    }
+
+    this.economy = { ...this.economy, mana: this.economy.mana - cost };
+    this.enhanceLevels.set(placed.unit.id, level + 1);
+    this.refreshMana();
+
+    this.placedUnits.forEach((entry, entryIndex) => {
+      if (entry.unit.id !== placed.unit.id) return;
+      const entryCell = this.boardCells.find((c) => cellIndex(c.row, c.col) === entryIndex);
+      if (entryCell) this.drawUnitSprite(entryCell, entry);
+    });
+
+    this.spawnFloatingText(cell.x, cell.y, `강화 Lv.${level + 1}!`, '#ffd98a');
   }
 
   private drawSummonButton(x: number, y: number): void {

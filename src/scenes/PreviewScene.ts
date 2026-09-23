@@ -12,6 +12,13 @@ export class PreviewScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.layout();
+    this.scale.on('resize', () => this.layout());
+  }
+
+  private layout(): void {
+    this.children.removeAll(true);
+
     const { width, height } = this.scale;
 
     this.cameras.main.setBackgroundColor('#07080d');

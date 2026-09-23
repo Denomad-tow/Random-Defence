@@ -17,6 +17,8 @@ export interface UnitDef {
 }
 
 export const NORMAL_UNITS: UnitDef[] = unitsData as UnitDef[];
+export const DECK_SIZE = 5;
+export const MAX_STAR = 7;
 
 export function pickRandomUnit(pool: UnitDef[] = NORMAL_UNITS): UnitDef {
   const index = Math.floor(Math.random() * pool.length);

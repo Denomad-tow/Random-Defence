@@ -9,7 +9,7 @@ import {
 } from '../core/board';
 import { computeMonsterPath, createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
 import { MONSTER_KINDS, type MonsterKindId } from '../core/monsters';
-import { NORMAL_UNITS, pickRandomUnit, ROLE_ATTACK_COLORS, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, pickRandomUnit, ROLE_ATTACK_COLORS, MAX_STAR, type UnitDef } from '../core/units';
 import {
   tickStatusEffects,
   applySlow,
@@ -75,9 +75,21 @@ export class GameScene extends Phaser.Scene {
   private pendingSummon?: PlacedUnit;
   private pendingSummonPreEconomy?: EconomyState;
   private placementHighlights: Phaser.GameObjects.Arc[] = [];
+  private deckUnitIds: string[] = NORMAL_UNITS.map((u) => u.id);
 
   constructor() {
     super('game');
+  }
+
+  init(data: { deck?: string[] }): void {
+    if (data?.deck && data.deck.length > 0) {
+      this.deckUnitIds = data.deck;
+    }
+  }
+
+  private deckPool(): UnitDef[] {
+    const pool = NORMAL_UNITS.filter((u) => this.deckUnitIds.includes(u.id));
+    return pool.length > 0 ? pool : NORMAL_UNITS;
   }
 
   create(): void {
@@ -187,7 +199,7 @@ export class GameScene extends Phaser.Scene {
       .zone(width / 2, buttonY, buttonWidth, buttonHeight)
       .setInteractive({ useHandCursor: true })
       .setDepth(1001)
-      .on('pointerdown', () => this.scene.restart());
+      .on('pointerdown', () => this.scene.restart({ deck: this.deckUnitIds }));
   }
 
   private updateMonsters(dt: number): void {
@@ -588,7 +600,7 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private drawUnitSprite(cell: CellPosition, placed: PlacedUnit): void {
+  private drawUnitSprite(cell: CellPosition, placed: PlacedUnit, animate = false): void {
     placed.sprite?.destroy();
     placed.label?.destroy();
 
@@ -608,6 +620,19 @@ export class GameScene extends Phaser.Scene {
       });
     sprite.setData('cellIndex', index);
     this.input.setDraggable(sprite);
+
+    if (animate) {
+      const targetScaleX = sprite.scaleX;
+      const targetScaleY = sprite.scaleY;
+      sprite.setScale(targetScaleX * 0.1, targetScaleY * 0.1);
+      this.tweens.add({
+        targets: sprite,
+        scaleX: targetScaleX,
+        scaleY: targetScaleY,
+        duration: 280,
+        ease: 'Back.Out',
+      });
+    }
 
     const level = this.enhanceLevels.get(placed.unit.id) ?? 0;
     const labelText = level > 0 ? `${'★'.repeat(placed.star)} · 강화${level}` : '★'.repeat(placed.star);
@@ -663,7 +688,7 @@ export class GameScene extends Phaser.Scene {
     if (this.placedUnits.has(index)) return;
 
     this.placedUnits.set(index, this.pendingSummon);
-    this.drawUnitSprite(cell, this.pendingSummon);
+    this.drawUnitSprite(cell, this.pendingSummon, true);
 
     this.pendingSummon = undefined;
     this.pendingSummonPreEconomy = undefined;
@@ -706,6 +731,17 @@ export class GameScene extends Phaser.Scene {
 
     const targetPlaced = this.placedUnits.get(targetIndex);
 
+    const canMerge =
+      targetPlaced &&
+      targetPlaced.unit.id === sourcePlaced.unit.id &&
+      targetPlaced.star === sourcePlaced.star &&
+      sourcePlaced.star < MAX_STAR;
+
+    if (canMerge) {
+      this.mergeUnits(sourceIndex, sourceCell, targetIndex, targetCell, sourcePlaced.star);
+      return;
+    }
+
     this.placedUnits.set(targetIndex, sourcePlaced);
     if (targetPlaced) {
       this.placedUnits.set(sourceIndex, targetPlaced);
@@ -717,6 +753,73 @@ export class GameScene extends Phaser.Scene {
     if (targetPlaced) {
       this.drawUnitSprite(sourceCell, targetPlaced);
     }
+  }
+
+  private mergeUnits(
+    sourceIndex: number,
+    sourceCell: CellPosition,
+    targetIndex: number,
+    targetCell: CellPosition,
+    fromStar: number,
+  ): void {
+    this.placedUnits.delete(sourceIndex);
+    this.placedUnits.delete(targetIndex);
+
+    const resultUnit = pickRandomUnit(this.deckPool());
+    const result: PlacedUnit = {
+      unit: resultUnit,
+      star: Math.min(MAX_STAR, fromStar + 1),
+      cooldown: Math.random() * 0.3,
+    };
+    this.placedUnits.set(targetIndex, result);
+
+    this.playMergeEffect(sourceCell, targetCell, () => {
+      this.drawUnitSprite(targetCell, result, true);
+    });
+  }
+
+  private playMergeEffect(from: CellPosition, to: CellPosition, onComplete: () => void): void {
+    const count = 10;
+    for (let i = 0; i < count; i += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = this.cellSize * 0.4;
+      const spark = this.add.circle(to.x + Math.cos(angle) * dist, to.y + Math.sin(angle) * dist, px(3), 0xffe9b0, 0.9);
+
+      this.tweens.add({
+        targets: spark,
+        x: to.x,
+        y: to.y,
+        alpha: 0,
+        duration: 320,
+        onComplete: () => spark.destroy(),
+      });
+    }
+
+    const ghost = this.add.circle(from.x, from.y, this.cellSize * 0.3, 0xffe9b0, 0.6);
+
+    this.tweens.add({
+      targets: ghost,
+      x: to.x,
+      y: to.y,
+      alpha: 0,
+      scale: 0.2,
+      duration: 320,
+      onComplete: () => {
+        ghost.destroy();
+        const flash = this.add.circle(to.x, to.y, this.cellSize * 0.55, 0xffffff, 0.9);
+
+        this.tweens.add({
+          targets: flash,
+          alpha: 0,
+          scale: 1.6,
+          duration: 250,
+          onComplete: () => {
+            flash.destroy();
+            onComplete();
+          },
+        });
+      },
+    });
   }
 
   private enterPlacementMode(): void {
@@ -806,7 +909,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingSummonPreEconomy = this.economy;
     this.economy = spendForSummon(this.economy);
 
-    const unit = pickRandomUnit(NORMAL_UNITS);
+    const unit = pickRandomUnit(this.deckPool());
     this.pendingSummon = { unit, star: 1, cooldown: Math.random() * 0.3 };
 
     this.refreshMana();
@@ -836,5 +939,38 @@ export class GameScene extends Phaser.Scene {
     monster.setData('kind', kind.id);
 
     this.monsters.push(monster);
+
+    if (result.kind === 'boss') {
+      this.announceBoss();
+    }
+  }
+
+  private announceBoss(): void {
+    const { width, height } = this.scale;
+
+    this.cameras.main.shake(400, 0.006);
+
+    const flash = this.add.rectangle(width / 2, height / 2, width, height, 0xff3b3b, 0.35).setDepth(900);
+    this.tweens.add({ targets: flash, alpha: 0, duration: 500, onComplete: () => flash.destroy() });
+
+    const banner = this.add
+      .text(width / 2, height * 0.22, '보스 출현!', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(26)}px`,
+        color: '#ffcf5a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(901)
+      .setAlpha(0);
+
+    this.tweens.add({
+      targets: banner,
+      alpha: 1,
+      duration: 200,
+      yoyo: true,
+      hold: 800,
+      onComplete: () => banner.destroy(),
+    });
   }
 }

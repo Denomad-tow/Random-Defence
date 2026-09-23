@@ -537,6 +537,17 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.refreshStatus();
 
+    const deckButton = this.add
+      .text(width - px(12), headerHeight * 0.4, '덱 변경', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#9a917d',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
+    deckButton.setPadding(px(6), px(6), px(6), px(6));
+
     this.drawSummonButton(width / 2, buttonY);
     this.refreshMana();
 

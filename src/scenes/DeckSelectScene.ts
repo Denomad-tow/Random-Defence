@@ -3,6 +3,7 @@ import { NORMAL_UNITS, DECK_SIZE, type UnitDef } from '../core/units';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
+import { loadSavedDeck, saveDeck } from '../meta/deck';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -16,13 +17,26 @@ export class DeckSelectScene extends Phaser.Scene {
   private cardRefs = new Map<string, CardRef>();
   private countText!: Phaser.GameObjects.Text;
   private startButtonText!: Phaser.GameObjects.Text;
+  private forceEdit = false;
 
   constructor() {
     super('deck-select');
   }
 
+  init(data: { forceEdit?: boolean }): void {
+    this.forceEdit = !!data?.forceEdit;
+  }
+
   create(): void {
-    this.selected = new Set();
+    const saved = loadSavedDeck();
+    const validSaved = saved?.filter((id) => NORMAL_UNITS.some((u) => u.id === id)) ?? [];
+
+    if (!this.forceEdit && validSaved.length === DECK_SIZE) {
+      this.scene.start('game', { deck: validSaved });
+      return;
+    }
+
+    this.selected = new Set(validSaved.slice(0, DECK_SIZE));
     this.layout();
     this.scale.on('resize', () => this.layout());
   }
@@ -171,6 +185,8 @@ export class DeckSelectScene extends Phaser.Scene {
 
   private tryStart(): void {
     if (this.selected.size !== DECK_SIZE) return;
-    this.scene.start('game', { deck: Array.from(this.selected) });
+    const deck = Array.from(this.selected);
+    saveDeck(deck);
+    this.scene.start('game', { deck });
   }
 }

@@ -20,6 +20,10 @@ export const RARITIES: RarityPreset[] = [
   { key: 'mythic', label: '신화', c1: '#ff5d7a', c2: '#6a1dff', glow: 0.9, sparkleCount: 10, rainbow: true },
 ];
 
+export function getRarity(key: string): RarityPreset {
+  return RARITIES.find((r) => r.key === key) ?? RARITIES[0];
+}
+
 export interface SigilDef {
   label: string;
   paths?: string[];

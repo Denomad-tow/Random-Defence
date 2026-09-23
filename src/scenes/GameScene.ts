@@ -29,7 +29,7 @@ import {
 } from '../core/economy';
 import { enhanceCost, canEnhance, statMultiplier, MAX_ENHANCE_LEVEL } from '../core/enhancement';
 import { loadBestStage, saveBestStage } from '../meta/progress';
-import { RARITIES } from '../core/graphics/gem';
+import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
   createNightSkyGlowTexture,
@@ -44,7 +44,6 @@ const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
 const FIRST_SPAWN_DELAY_MS = 10000;
 const MAX_MONSTERS_ON_FIELD = 100;
-const NORMAL_RARITY = RARITIES.find((r) => r.key === 'normal')!;
 
 interface PlacedUnit {
   unit: UnitDef;
@@ -629,7 +628,7 @@ export class GameScene extends Phaser.Scene {
     const size = Math.round(this.cellSize * 0.86);
     const sigil = ROLE_SIGILS[placed.unit.role];
     const key = `unit-${placed.unit.rarity}-${placed.unit.role}-${size}`;
-    createGemTexture(this, key, NORMAL_RARITY, sigil, 1, size);
+    createGemTexture(this, key, getRarity(placed.unit.rarity), sigil, 1, size);
 
     const index = cellIndex(cell.row, cell.col);
     const sprite = this.add

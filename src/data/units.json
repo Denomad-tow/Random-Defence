@@ -78,5 +78,85 @@
     "attackSpeed": 0,
     "range": 0,
     "effects": [{ "type": "goldGen", "value": 2, "interval": 2 }]
+  },
+  {
+    "id": "single_uncommon",
+    "name": "철검 용병",
+    "rarity": "uncommon",
+    "role": "single",
+    "attack": 24,
+    "attackSpeed": 0.95,
+    "range": 2,
+    "effects": []
+  },
+  {
+    "id": "aoe_uncommon",
+    "name": "폭염 주술사",
+    "rarity": "uncommon",
+    "role": "aoe",
+    "attack": 11,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "aoe", "radius": 1.2 }]
+  },
+  {
+    "id": "slow_uncommon",
+    "name": "빙결 술사",
+    "rarity": "uncommon",
+    "role": "slow",
+    "attack": 13,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "slow", "value": 0.3, "duration": 1.7 }]
+  },
+  {
+    "id": "stun_uncommon",
+    "name": "충격 용병",
+    "rarity": "uncommon",
+    "role": "stun",
+    "attack": 12,
+    "attackSpeed": 0.85,
+    "range": 1,
+    "effects": [{ "type": "stun", "chance": 0.22, "duration": 1.1 }]
+  },
+  {
+    "id": "poison_uncommon",
+    "name": "역병 주술사",
+    "rarity": "uncommon",
+    "role": "poison",
+    "attack": 8,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "poison", "value": 6, "duration": 3.2 }]
+  },
+  {
+    "id": "armorBreak_uncommon",
+    "name": "파쇄 전사",
+    "rarity": "uncommon",
+    "role": "armorBreak",
+    "attack": 12,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "armorBreak", "value": 0.22, "duration": 2.2 }]
+  },
+  {
+    "id": "buff_uncommon",
+    "name": "성가 사제",
+    "rarity": "uncommon",
+    "role": "buff",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 2,
+    "effects": [{ "type": "buff", "stat": "attackSpeed", "value": 0.22 }]
+  },
+  {
+    "id": "goldGen_uncommon",
+    "name": "숙련 연금술사",
+    "rarity": "uncommon",
+    "role": "goldGen",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 0,
+    "effects": [{ "type": "goldGen", "value": 3, "interval": 2 }]
   }
 ]

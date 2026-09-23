@@ -64,8 +64,8 @@
     "name": "찬가 견습생",
     "rarity": "normal",
     "role": "buff",
-    "attack": 4,
-    "attackSpeed": 1.0,
+    "attack": 0,
+    "attackSpeed": 0,
     "range": 2,
     "effects": [{ "type": "buff", "stat": "attackSpeed", "value": 0.15 }]
   },

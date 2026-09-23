@@ -11,6 +11,16 @@ import { computeMonsterPath, createInitialWaveState, nextSpawn, stageHpMultiplie
 import { MONSTER_KINDS, type MonsterKindId } from '../core/monsters';
 import { NORMAL_UNITS, pickRandomUnit, ROLE_ATTACK_COLORS, type UnitDef } from '../core/units';
 import {
+  tickStatusEffects,
+  applySlow,
+  applyStun,
+  applyArmorBreak,
+  applyPoison,
+  effectiveSpeedMultiplier,
+  damageTakenMultiplier,
+  type StatusEffects,
+} from '../core/combat';
+import {
   createInitialEconomy,
   currentSummonCost,
   canAffordSummon,
@@ -72,10 +82,20 @@ export class GameScene extends Phaser.Scene {
 
   private updateMonsters(dt: number): void {
     this.monsters.forEach((monster) => {
+      const status = (monster.getData('status') as StatusEffects) ?? {};
+      const tickResult = tickStatusEffects(status, dt);
+      monster.setData('status', tickResult.status);
+
+      if (tickResult.poisonDamage > 0) {
+        this.dealDamage(monster, tickResult.poisonDamage, '#8ee08e');
+        if (!monster.active) return;
+      }
+
+      const speedMultiplier = effectiveSpeedMultiplier(tickResult.status);
       const phase = monster.getData('phase') as 'approach' | 'crawl';
 
       if (phase === 'approach') {
-        const speed = monster.getData('speed') as number;
+        const speed = (monster.getData('speed') as number) * speedMultiplier;
         const t = Math.min(1, (monster.getData('t') as number) + speed * dt);
         monster.setData('t', t);
         const point = this.monsterPath.getPoint(t);
@@ -95,7 +115,7 @@ export class GameScene extends Phaser.Scene {
       }
 
       if (monster.y < this.fieldBottomY) {
-        const crawlSpeed = (monster.getData('crawlSpeed') as number) * this.boardStep;
+        const crawlSpeed = (monster.getData('crawlSpeed') as number) * this.boardStep * speedMultiplier;
         const y = Math.min(this.fieldBottomY, monster.y + crawlSpeed * dt);
         monster.setPosition(monster.x, y);
       }
@@ -103,6 +123,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateCombat(dt: number): void {
+    const buffBonuses = this.computeBuffBonuses();
+
     this.placedUnits.forEach((placed, index) => {
       placed.cooldown -= dt;
       if (placed.cooldown > 0) return;
@@ -115,15 +137,46 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      if (placed.unit.attack <= 0 || placed.unit.attackSpeed <= 0) return;
+      if (placed.unit.role === 'buff' || placed.unit.attack <= 0 || placed.unit.attackSpeed <= 0) {
+        placed.cooldown = 1;
+        return;
+      }
 
       const rangePx = placed.unit.range * this.boardStep;
       const target = this.findNearestMonster(cell.x, cell.y, rangePx);
       if (!target) return;
 
-      placed.cooldown = 1 / placed.unit.attackSpeed;
+      const bonus = buffBonuses.get(index) ?? 0;
+      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
       this.performAttack(cell, target, placed.unit);
     });
+  }
+
+  private computeBuffBonuses(): Map<number, number> {
+    const bonuses = new Map<number, number>();
+
+    this.placedUnits.forEach((buffer, buffIndex) => {
+      if (buffer.unit.role !== 'buff') return;
+
+      const bufferCell = this.boardCells.find((c) => cellIndex(c.row, c.col) === buffIndex);
+      if (!bufferCell) return;
+
+      const effect = buffer.unit.effects.find((e) => e.type === 'buff');
+      const value = (effect?.value as number) ?? 0;
+      const rangePx = buffer.unit.range * this.boardStep;
+
+      this.placedUnits.forEach((_ally, allyIndex) => {
+        if (allyIndex === buffIndex) return;
+        const allyCell = this.boardCells.find((c) => cellIndex(c.row, c.col) === allyIndex);
+        if (!allyCell) return;
+
+        if (Phaser.Math.Distance.Between(bufferCell.x, bufferCell.y, allyCell.x, allyCell.y) <= rangePx) {
+          bonuses.set(allyIndex, (bonuses.get(allyIndex) ?? 0) + value);
+        }
+      });
+    });
+
+    return bonuses;
   }
 
   private performGoldGen(cell: CellPosition, placed: PlacedUnit): void {
@@ -168,12 +221,61 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => {
         projectile.destroy();
         if (!target.active) return;
-        this.resolveHit(target, unitDef.attack);
+        this.applyUnitHit(target, unitDef);
       },
     });
   }
 
-  private resolveHit(target: Phaser.GameObjects.Image, damage: number): void {
+  private applyUnitHit(target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
+    this.dealDamage(target, unitDef.attack, '#fff5d6');
+    if (!target.active) return;
+
+    this.applyRoleEffect(target, unitDef);
+
+    if (unitDef.role === 'aoe') {
+      const effect = unitDef.effects.find((e) => e.type === 'aoe');
+      const radius = ((effect?.radius as number) ?? 1) * this.boardStep;
+
+      this.monsters.forEach((other) => {
+        if (other === target || !other.active) return;
+        if (Phaser.Math.Distance.Between(target.x, target.y, other.x, other.y) <= radius) {
+          this.dealDamage(other, unitDef.attack, '#fff5d6');
+        }
+      });
+    }
+  }
+
+  private applyRoleEffect(target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
+    const effect = unitDef.effects[0];
+    if (!effect) return;
+
+    let status = (target.getData('status') as StatusEffects) ?? {};
+
+    switch (effect.type) {
+      case 'slow':
+        status = applySlow(status, effect.value as number, effect.duration as number);
+        break;
+      case 'stun':
+        if (Math.random() < (effect.chance as number)) {
+          status = applyStun(status, effect.duration as number);
+        }
+        break;
+      case 'poison':
+        status = applyPoison(status, effect.value as number, effect.duration as number);
+        break;
+      case 'armorBreak':
+        status = applyArmorBreak(status, effect.value as number, effect.duration as number);
+        break;
+      default:
+        return;
+    }
+
+    target.setData('status', status);
+  }
+
+  private dealDamage(target: Phaser.GameObjects.Image, baseDamage: number, color: string): void {
+    const status = (target.getData('status') as StatusEffects) ?? {};
+    const damage = Math.round(baseDamage * damageTakenMultiplier(status));
     const hp = (target.getData('hp') as number) - damage;
     target.setData('hp', hp);
 
@@ -182,7 +284,7 @@ export class GameScene extends Phaser.Scene {
       if (target.active) target.clearTint();
     });
 
-    this.spawnFloatingText(target.x, target.y, `-${damage}`, '#fff5d6');
+    this.spawnFloatingText(target.x, target.y, `-${damage}`, color);
 
     if (hp <= 0) {
       this.killMonster(target);

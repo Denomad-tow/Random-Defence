@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>아케인 룬 스타일 미리보기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07080d;--bg2:#10131d;--gold:#d4b36a;--gold2:#8a6a2c;--text:#ece4d0;--muted:#9a917d;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root:not([data-theme="light"]){--bg:#07080d}
+:root[data-theme="dark"]{--bg:#07080d}
+*{box-sizing:border-box;margin:0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:radial-gradient(ellipse at 50% -10%,#1b2033 0%,var(--bg) 60%) fixed,var(--bg);color:var(--text);font-family:"Noto Serif KR","Nanum Myeongjo",Georgia,serif;min-height:100vh;padding:40px 20px 60px}
+.wrap{max-width:1080px;margin:0 auto}
+header{text-align:center;margin-bottom:40px}
+.eyebrow{letter-spacing:.4em;font-size:12px;color:var(--gold);margin-bottom:10px}
+h1{font-size:clamp(26px,4vw,40px);font-weight:700;background:linear-gradient(180deg,#f6e6b4,#b8903f);-webkit-background-clip:text;background-clip:text;color:transparent}
+.rule{width:220px;height:14px;margin:14px auto 0}
+.sub{color:var(--muted);margin-top:10px;font-size:14px}
+h2{font-size:18px;font-weight:600;color:var(--gold);text-align:center;margin:48px 0 22px;letter-spacing:.1em}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:18px}
+.card{position:relative;border-radius:14px;padding:16px 10px 14px;text-align:center;background:linear-gradient(180deg,#151a28,#0b0d15);transition:transform .25s ease}
+.card:hover{transform:translateY(-6px)}
+.card::before{content:"";position:absolute;inset:0;border-radius:14px;padding:1.5px;background:linear-gradient(160deg,var(--c1),var(--gold2) 45%,var(--c2));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.card .glow{position:absolute;left:50%;top:78px;width:120px;height:120px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,var(--c1) 0%,transparent 70%);opacity:var(--gl);filter:blur(6px);animation:pulse 3s ease-in-out infinite}
+.card svg{position:relative;width:120px;height:120px;display:block;margin:0 auto}
+.rar{font-size:12px;letter-spacing:.3em;color:var(--c1);margin-top:8px}
+.nm{font-size:15px;font-weight:600;margin-top:4px}
+.eff{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;min-height:36px}
+.stars{color:var(--gold);font-size:12px;letter-spacing:2px;margin-top:6px}
+.myth::before{background:conic-gradient(from var(--a),#ff4d6d,#ffd166,#06d6a0,#4cc9f0,#b15cff,#ff4d6d);animation:spin 4s linear infinite}
+@property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
+@keyframes spin{to{--a:360deg}}
+@keyframes pulse{50%{opacity:calc(var(--gl) * .55)}}
+.spark{position:absolute;width:3px;height:3px;border-radius:50%;background:var(--c1);box-shadow:0 0 6px var(--c1);animation:rise 2.6s linear infinite;opacity:0}
+@keyframes rise{0%{opacity:0;transform:translateY(0)}20%{opacity:1}100%{opacity:0;transform:translateY(-70px)}}
+.roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:14px}
+.role{text-align:center;padding:12px 6px;border-radius:12px;background:#0d1019;border:1px solid #2a2618}
+.role svg{width:72px;height:72px}
+.role div{font-size:13px;margin-top:6px}
+.note{margin:44px auto 0;max-width:640px;text-align:center;color:var(--muted);font-size:13px;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<div class="eyebrow">ARCANE RUNE DEFENSE</div>
+<h1>아케인 룬 스타일 미리보기</h1>
+<svg class="rule" viewBox="0 0 220 14"><path d="M0 7H90M130 7H220" stroke="#8a6a2c"/><path d="M110 1l6 6-6 6-6-6z" fill="none" stroke="#d4b36a"/><circle cx="96" cy="7" r="2" fill="#d4b36a"/><circle cx="124" cy="7" r="2" fill="#d4b36a"/></svg>
+<p class="sub">같은 둔화 역할 유닛의 6등급 카드 — 등급마다 보석 재질과 빛이 달라집니다</p>
+</header>
+<div class="grid" id="cards"></div>
+<h2>역할 8종의 룬 문양</h2>
+<div class="roles" id="roles"></div>
+<p class="note">모든 그래픽은 이미지 파일 없이 코드로만 그렸습니다. 실제 게임에서는 여기에 공격 이펙트, 합성 연출, 상자 열기 연출이 더해집니다.</p>
+</div>
+<script>
+const R=[
+{k:"노말",n:"서리 조각",c1:"#aab0bb",c2:"#5b606b",g:.15,e:"이동속도 20% 감소",s:1,p:0},
+{k:"고급",n:"비취 한기",c1:"#4fd39a",c2:"#16623f",g:.3,e:"이동속도 30% 감소",s:2,p:0},
+{k:"희귀",n:"청옥 서리",c1:"#4f9dff",c2:"#173e8a",g:.45,e:"30% 감소, 2마리 동시",s:3,p:2},
+{k:"영웅",n:"자수정 빙결",c1:"#b67dff",c2:"#4a1f8f",g:.6,e:"40% 감소, 광역",s:4,p:4},
+{k:"전설",n:"황금 서리왕관",c1:"#ffc15a",c2:"#8c5a12",g:.75,e:"40% 광역 + 방어력 감소",s:5,p:7},
+{k:"신화",n:"영겁의 빙하",c1:"#ff5d7a",c2:"#6a1dff",g:.9,e:"50% 광역 + 확률로 완전 정지",s:6,p:10,m:1}];
+const snow=`<g stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none" opacity=".92"><path d="M60 38V82M41 49l38 22M41 71l38-22"/><path d="M54 42l6 6 6-6M54 78l6-6 6 6M43 56l8-1-3-7M77 64l-8 1 3 7M43 64l8 1-3 7M77 56l-8-1 3-7"/></g>`;
+function gem(c1,c2,id,sig){return `<svg viewBox="0 0 120 120"><defs><linearGradient id="a${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".25" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient><linearGradient id="f${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3dc9a"/><stop offset="1" stop-color="#7a5a22"/></linearGradient><filter id="g${id}"><feGaussianBlur stdDeviation="1.6"/></filter></defs><path d="M60 6l47 27v54L60 114 13 87V33z" fill="none" stroke="url(#f${id})" stroke-width="2"/><path d="M60 13l41 24v46L60 107 19 83V37z" fill="url(#a${id})"/><path d="M60 13L60 60 19 37z" fill="#fff" opacity=".28"/><path d="M60 13l41 24L60 60z" fill="#fff" opacity=".1"/><path d="M19 83L60 60 60 107z" fill="#000" opacity=".22"/><path d="M101 83L60 60 60 107z" fill="#000" opacity=".35"/><path d="M60 26l29 17v34L60 94 31 77V43z" fill="${c2}" opacity=".55"/><g filter="url(#g${id})" opacity=".8">${sig}</g>${sig}<circle cx="60" cy="6" r="3" fill="#f3dc9a"/><circle cx="60" cy="114" r="3" fill="#f3dc9a"/></svg>`}
+const cards=document.getElementById("cards");
+R.forEach((r,i)=>{const d=document.createElement("div");d.className="card"+(r.m?" myth":"");d.style.setProperty("--c1",r.c1);d.style.setProperty("--c2",r.c2);d.style.setProperty("--gl",r.g);
+let sp="";for(let j=0;j<r.p;j++)sp+=`<span class="spark" style="left:${20+Math.random()*60}%;top:${45+Math.random()*30}%;animation-delay:${(Math.random()*2.6).toFixed(2)}s"></span>`;
+d.innerHTML=`<div class="glow"></div>${sp}${gem(r.c1,r.c2,i,snow)}<div class="rar">${r.k}</div><div class="nm">${r.n}</div><div class="stars">${"★".repeat(r.s)}<span style="opacity:.25">${"★".repeat(7-r.s)}</span></div><div class="eff">${r.e}</div>`;cards.appendChild(d)});
+const S={
+"단일 딜러":`<path d="M60 30V90M60 30l-8 12M60 30l8 12M50 82h20"/>`,
+"광역":`<circle cx="60" cy="60" r="10"/><path d="M60 34v8M60 78v8M34 60h8M78 60h8M42 42l6 6M72 72l6 6M42 78l6-6M72 48l6-6"/>`,
+"둔화":`<path d="M60 38V82M41 49l38 22M41 71l38-22"/>`,
+"기절":`<path d="M66 32L48 62h14L54 88l20-32H60z"/>`,
+"독":`<path d="M60 34c10 16 18 24 18 34a18 18 0 01-36 0c0-10 8-18 18-34z"/><circle cx="55" cy="70" r="3"/>`,
+"방어력 감소":`<path d="M60 34l20 8v16c0 14-9 22-20 28-11-6-20-14-20-28V42z"/><path d="M62 40l-6 14 8 6-6 16"/>`,
+"버프":`<path d="M44 66l16-14 16 14M44 82l16-14 16 14M60 34v12"/>`,
+"마나 생성":`<path d="M60 32l14 22-14 34-14-34z"/><path d="M46 54h28M82 38l4 4-4 4-4-4z"/>`};
+const roles=document.getElementById("roles");let q=0;
+for(const [k,v] of Object.entries(S)){const sig=`<g stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none">${v}</g>`;const d=document.createElement("div");d.className="role";d.innerHTML=gem("#ffc15a","#8c5a12","r"+q++,sig)+`<div>${k}</div>`;roles.appendChild(d)}
+</script>
+</body>
+</html>

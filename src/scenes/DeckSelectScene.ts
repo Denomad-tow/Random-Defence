@@ -141,10 +141,10 @@ export class DeckSelectScene extends Phaser.Scene {
 
     const owned = this.ownedUnits();
     const cols = 8;
-    const rowsPerPage = 2;
+    const rowsPerPage = 3;
 
-    // Grid is fixed at exactly 2 rows (per user request); more columns keeps
-    // cards small/narrow, and pagination handles anything beyond 2 rows.
+    // Grid is fixed at exactly 3 rows (per user request); more columns keeps
+    // cards small/narrow, and pagination handles anything beyond 3 rows.
     // Card size is width-bound, with a height-based cap only as a safety net
     // for very short screens.
     const rowSpacingFactor = 1.45;
@@ -198,6 +198,17 @@ export class DeckSelectScene extends Phaser.Scene {
         color: '#f6e6b4',
       })
       .setOrigin(0.5);
+
+    this.add
+      .text(width - px(12), countY, '초기화', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#ff9a9a',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(8), px(8), px(8), px(8))
+      .on('pointerdown', () => this.resetSelection());
 
     const bg = this.add.graphics();
     bg.fillStyle(0x151a28, 0.95);
@@ -351,6 +362,12 @@ export class DeckSelectScene extends Phaser.Scene {
     }
 
     this.updateCardVisual(id);
+    this.refreshSelectionUI();
+  }
+
+  private resetSelection(): void {
+    this.selected.clear();
+    this.cardRefs.forEach((_, id) => this.updateCardVisual(id));
     this.refreshSelectionUI();
   }
 

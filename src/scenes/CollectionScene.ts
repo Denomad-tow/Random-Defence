@@ -11,7 +11,7 @@ import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const ROWS_PER_PAGE = 6;
-const COLS = 2;
+const COLS = 4;
 
 export class CollectionScene extends Phaser.Scene {
   private page = 0;
@@ -95,48 +95,50 @@ export class CollectionScene extends Phaser.Scene {
   }
 
   private drawCard(unit: UnitDef, x0: number, colWidth: number, y: number, rowHeight: number): void {
-    const pad = colWidth * 0.04;
+    const pad = colWidth * 0.05;
     const cardX = x0 + pad;
     const cardW = colWidth - pad * 2;
+    const cardTop = y - rowHeight * 0.44;
+    const cardH = rowHeight * 0.88;
+    const cx = cardX + cardW / 2;
 
     const cardBg = this.add.graphics();
     cardBg.fillStyle(0x151a28, 0.85);
-    cardBg.fillRoundedRect(cardX, y - rowHeight * 0.44, cardW, rowHeight * 0.88, px(8));
+    cardBg.fillRoundedRect(cardX, cardTop, cardW, cardH, px(6));
     cardBg.lineStyle(px(1), 0xd4b36a, 0.4);
-    cardBg.strokeRoundedRect(cardX, y - rowHeight * 0.44, cardW, rowHeight * 0.88, px(8));
+    cardBg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(6));
 
-    const iconSize = rowHeight * 0.5;
-    const iconX = cardX + iconSize * 0.6;
-    const iconY = y - rowHeight * 0.16;
+    // Stacked vertically (icon / name / level / level-up button) so the
+    // card still reads well at 4-column width.
+    const iconSize = Math.min(cardW * 0.6, cardH * 0.34);
+    const iconY = cardTop + cardH * 0.24;
     const sigil = ROLE_SIGILS[unit.role];
     const key = `collicon-${unit.id}-${Math.round(iconSize)}`;
     createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, Math.round(iconSize));
-    this.add.image(iconX, iconY, key).setDisplaySize(iconSize * 0.9, iconSize * 0.9);
+    this.add.image(cx, iconY, key).setDisplaySize(iconSize * 0.92, iconSize * 0.92);
 
     const count = this.ownedCounts.get(unit.id) ?? 0;
     const level = getUnitLevel(unit.id);
-    const textX = cardX + iconSize * 1.25;
-    const textWrapWidth = cardX + cardW - textX - pad * 0.5;
 
     this.add
-      .text(textX, y - rowHeight * 0.26, unit.name, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(11)}px`,
-        color: '#f0e9d8',
-        wordWrap: { width: textWrapWidth },
-      })
-      .setOrigin(0, 0.5);
-
-    this.add
-      .text(textX, y - rowHeight * 0.04, `Lv.${level} · 보유 ${count}`, {
+      .text(cx, cardTop + cardH * 0.48, unit.name, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(9)}px`,
-        color: '#9a917d',
-        wordWrap: { width: textWrapWidth },
+        color: '#f0e9d8',
+        align: 'center',
+        wordWrap: { width: cardW * 0.96 },
       })
-      .setOrigin(0, 0.5);
+      .setOrigin(0.5, 0.5);
 
-    this.drawLevelUpButton(unit, count, level, cardX + cardW / 2, y + rowHeight * 0.27, cardW * 0.92, rowHeight * 0.3);
+    this.add
+      .text(cx, cardTop + cardH * 0.65, `Lv.${level} · ${count}개`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(7.5)}px`,
+        color: '#9a917d',
+      })
+      .setOrigin(0.5, 0.5);
+
+    this.drawLevelUpButton(unit, count, level, cx, cardTop + cardH * 0.85, cardW * 0.9, cardH * 0.24);
   }
 
   private drawLevelUpButton(
@@ -148,11 +150,14 @@ export class CollectionScene extends Phaser.Scene {
     buttonWidth: number,
     buttonHeight: number,
   ): void {
+    const labelFontSize = Math.max(7.5, Math.round(buttonWidth * 0.14));
+    const costFontSize = Math.max(6, Math.round(buttonWidth * 0.1));
+
     if (level >= MAX_UNIT_LEVEL) {
       this.add
         .text(x, y, 'MAX', {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(12)}px`,
+          fontSize: `${px(labelFontSize)}px`,
           color: '#6a6458',
         })
         .setOrigin(0.5);
@@ -171,18 +176,18 @@ export class CollectionScene extends Phaser.Scene {
     bg.strokeRoundedRect(x - buttonWidth / 2, y - buttonHeight / 2, buttonWidth, buttonHeight, px(6));
 
     this.add
-      .text(x, y - buttonHeight * 0.15, '레벨업', {
+      .text(x, y - buttonHeight * 0.18, '레벨업', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(11)}px`,
+        fontSize: `${px(labelFontSize)}px`,
         color: canAfford ? '#ffd98a' : '#8a8272',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     this.add
-      .text(x, y + buttonHeight * 0.28, `중복 ${cost.duplicates} · 골드 ${cost.gold}`, {
+      .text(x, y + buttonHeight * 0.3, `중복${cost.duplicates}·골드${cost.gold}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(8.5)}px`,
+        fontSize: `${px(costFontSize)}px`,
         color: '#8a8272',
       })
       .setOrigin(0.5);

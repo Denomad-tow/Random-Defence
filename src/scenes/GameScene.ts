@@ -36,6 +36,7 @@ import { addBox } from '../meta/boxes';
 import { getBoxType } from '../meta/gacha';
 import { computeRunReward, type RunReward } from '../meta/rewards';
 import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
+import { generalAttackMultiplier, generalAttackSpeedBonus, roleMultiplier } from '../meta/research';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -300,7 +301,7 @@ export class GameScene extends Phaser.Scene {
       }
 
       const rangePx = placed.unit.range * this.boardStep;
-      const bonus = buffBonuses.get(index) ?? 0;
+      const bonus = (buffBonuses.get(index) ?? 0) + generalAttackSpeedBonus();
       const attack = Math.round(placed.unit.attack * this.totalMultiplier(placed.unit));
 
       if (placed.unit.effects.some((e) => e.type === 'multishot')) {
@@ -568,28 +569,29 @@ export class GameScene extends Phaser.Scene {
 
   private applyRoleEffect(target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
     const statusTypes = ['slow', 'stun', 'poison', 'armorBreak'];
+    const magnitude = roleMultiplier(unitDef.role);
 
     unitDef.effects
       .filter((effect) => statusTypes.includes(effect.type))
       .forEach((effect) => {
-        this.applyStatusEffect(target, effect);
+        this.applyStatusEffect(target, effect, magnitude);
 
         const extraTargets = ((effect.targets as number) ?? 1) - 1;
         if (extraTargets > 0) {
           const nearby = this.findNearestMonsters(target.x, target.y, this.cellSize * 1.8, extraTargets + 1).filter(
             (m) => m !== target,
           );
-          nearby.slice(0, extraTargets).forEach((m) => this.applyStatusEffect(m, effect));
+          nearby.slice(0, extraTargets).forEach((m) => this.applyStatusEffect(m, effect, magnitude));
         }
       });
   }
 
-  private applyStatusEffect(target: Phaser.GameObjects.Image, effect: UnitEffect): void {
+  private applyStatusEffect(target: Phaser.GameObjects.Image, effect: UnitEffect, magnitude = 1): void {
     let status = (target.getData('status') as StatusEffects) ?? {};
 
     switch (effect.type) {
       case 'slow':
-        status = applySlow(status, effect.value as number, effect.duration as number);
+        status = applySlow(status, (effect.value as number) * magnitude, effect.duration as number);
         break;
       case 'stun':
         if (Math.random() < (effect.chance as number)) {
@@ -597,10 +599,10 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       case 'poison':
-        status = applyPoison(status, effect.value as number, effect.duration as number);
+        status = applyPoison(status, (effect.value as number) * magnitude, effect.duration as number);
         break;
       case 'armorBreak':
-        status = applyArmorBreak(status, effect.value as number, effect.duration as number);
+        status = applyArmorBreak(status, (effect.value as number) * magnitude, effect.duration as number);
         break;
       default:
         return;
@@ -926,7 +928,12 @@ export class GameScene extends Phaser.Scene {
 
   private totalMultiplier(unit: UnitDef): number {
     const enhanceLevel = this.enhanceLevels.get(unit.id) ?? 0;
-    return statMultiplier(enhanceLevel) * levelStatMultiplier(getUnitLevel(unit.id));
+    return (
+      statMultiplier(enhanceLevel) *
+      levelStatMultiplier(getUnitLevel(unit.id)) *
+      generalAttackMultiplier() *
+      roleMultiplier(unit.role)
+    );
   }
 
   private tryEnhance(index: number): void {

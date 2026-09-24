@@ -137,6 +137,18 @@ export class DeckSelectScene extends Phaser.Scene {
       .on('pointerdown', () => this.devUnlockAll());
     devButton.setPadding(px(8), px(8), px(8), px(8));
 
+    const researchButton = this.add
+      .text(px(12), height * 0.09, '연구', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#a8ffb0',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('research'));
+    researchButton.setPadding(px(8), px(8), px(8), px(8));
+
     this.drawSlotTabs(width, height * 0.13);
 
     const owned = this.ownedUnits();

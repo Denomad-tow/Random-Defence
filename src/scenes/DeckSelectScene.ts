@@ -106,15 +106,15 @@ export class DeckSelectScene extends Phaser.Scene {
     this.add
       .text(width / 2, height * 0.093, `보유한 유닛 중 ${DECK_SIZE}종을 고르세요`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
+        fontSize: `${px(18)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, height * 0.125, `골드 ${loadGold()}`, {
+      .text(width / 2, height * 0.135, `골드 ${loadGold()}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(15)}px`,
+        fontSize: `${px(22.5)}px`,
         color: '#ffd98a',
         fontStyle: 'bold',
       })
@@ -123,7 +123,7 @@ export class DeckSelectScene extends Phaser.Scene {
     const boxes = loadBoxes();
     const totalBoxes = Object.values(boxes).reduce((sum, n) => sum + n, 0);
 
-    const navY = height * 0.175;
+    const navY = height * 0.185;
     const navGap = width * 0.025;
     const navWidth = (width * 0.94 - navGap * 3) / 4;
     const navHeight = height * 0.05;
@@ -141,7 +141,7 @@ export class DeckSelectScene extends Phaser.Scene {
       this.drawNavButton(x, navY, navWidth, navHeight, btn.label, btn.color, btn.onClick);
     });
 
-    this.drawSlotTabs(width, height * 0.23);
+    this.drawSlotTabs(width, height * 0.25);
 
     const owned = this.ownedUnits();
     const cols = 8;
@@ -153,7 +153,7 @@ export class DeckSelectScene extends Phaser.Scene {
     // for very short screens.
     const rowSpacingFactor = 1.45;
     const lastRowExtra = 1.1;
-    const gridTop = height * 0.28;
+    const gridTop = height * 0.3;
     const rowsFactor = rowSpacingFactor * (rowsPerPage - 1) + lastRowExtra;
     const cardSizeByWidth = width / (cols + 1.4);
     const cardSizeByHeight = (height * 0.5) / rowsFactor;
@@ -366,21 +366,21 @@ export class DeckSelectScene extends Phaser.Scene {
 
       const bg = this.add.graphics();
       bg.fillStyle(active ? 0x2a2416 : 0x151a28, active ? 1 : 0.85);
-      bg.fillRoundedRect(x - tabWidth / 2, y - px(14), tabWidth, px(28), px(8));
+      bg.fillRoundedRect(x - tabWidth / 2, y - px(21), tabWidth, px(42), px(8));
       bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x3a3a3a, 1);
-      bg.strokeRoundedRect(x - tabWidth / 2, y - px(14), tabWidth, px(28), px(8));
+      bg.strokeRoundedRect(x - tabWidth / 2, y - px(21), tabWidth, px(42), px(8));
 
       this.add
         .text(x, y, `덱 ${i + 1}`, {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(12)}px`,
+          fontSize: `${px(18)}px`,
           color: active ? '#ffd98a' : '#8a8272',
           fontStyle: active ? 'bold' : 'normal',
         })
         .setOrigin(0.5);
 
       this.add
-        .zone(x, y, tabWidth, px(28))
+        .zone(x, y, tabWidth, px(42))
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.switchSlot(i));
     }
@@ -401,7 +401,7 @@ export class DeckSelectScene extends Phaser.Scene {
     bg.lineStyle(px(1.5), Phaser.Display.Color.HexStringToColor(color).color, 0.8);
     bg.strokeRoundedRect(x - buttonWidth / 2, y - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
 
-    const fontSize = Math.max(9, Math.round(buttonWidth * 0.135));
+    const fontSize = Math.max(9, Math.round(buttonWidth * 0.135)) / 2;
     this.add
       .text(x, y, label, {
         fontFamily: TITLE_FONT,

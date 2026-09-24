@@ -733,7 +733,7 @@ export class GameScene extends Phaser.Scene {
     const deckButton = this.add
       .text(width - px(12), headerHeight * 0.4, '덱 변경', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(11)}px`,
+        fontSize: `${px(16.5)}px`,
         color: '#9a917d',
       })
       .setOrigin(1, 0.5)
@@ -744,7 +744,7 @@ export class GameScene extends Phaser.Scene {
     this.rangeToggleText = this.add
       .text(width - px(12), headerHeight * 0.78, this.showRange ? '사거리 끄기' : '사거리 보기', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(11)}px`,
+        fontSize: `${px(16.5)}px`,
         color: this.showRange ? '#9fd8ff' : '#6a6458',
       })
       .setOrigin(1, 0.5)

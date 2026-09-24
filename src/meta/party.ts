@@ -36,6 +36,10 @@ export interface DamageEventPayload {
   from: string; // 누가 때렸는지(닉네임). 나중에 기여도 보상 계산에 쓸 수 있다.
 }
 
+export interface KillRewardPayload {
+  kind: string; // MonsterKindId — 몬스터 종류별로 마나 보상이 다르다.
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
 const CODE_LENGTH = 5;
 
@@ -48,6 +52,7 @@ let membersHandler: (members: PartyMember[]) => void = () => {};
 let startHandler: () => void = () => {};
 let monsterSyncHandler: (payload: MonsterSyncPayload) => void = () => {};
 let damageHandler: (payload: DamageEventPayload) => void = () => {};
+let killRewardHandler: (payload: KillRewardPayload) => void = () => {};
 
 function randomCode(): string {
   let code = '';
@@ -79,6 +84,7 @@ function connect(
   startHandler = onStart;
   monsterSyncHandler = () => {};
   damageHandler = () => {};
+  killRewardHandler = () => {};
 
   channel = supabase.channel(`party-room-${code}`, {
     config: { presence: { key: nickname } },
@@ -99,6 +105,10 @@ function connect(
 
   channel.on('broadcast', { event: 'damage' }, (msg) => {
     damageHandler(msg.payload as DamageEventPayload);
+  });
+
+  channel.on('broadcast', { event: 'kill-reward' }, (msg) => {
+    killRewardHandler(msg.payload as KillRewardPayload);
   });
 
   return new Promise((resolve, reject) => {
@@ -144,6 +154,7 @@ export function leaveRoom(): void {
   startHandler = () => {};
   monsterSyncHandler = () => {};
   damageHandler = () => {};
+  killRewardHandler = () => {};
 }
 
 export function broadcastStart(): void {
@@ -168,6 +179,14 @@ export function setDamageHandler(handler: (payload: DamageEventPayload) => void)
 
 export function broadcastDamage(payload: DamageEventPayload): void {
   channel?.send({ type: 'broadcast', event: 'damage', payload });
+}
+
+export function setKillRewardHandler(handler: (payload: KillRewardPayload) => void): void {
+  killRewardHandler = handler;
+}
+
+export function broadcastKillReward(payload: KillRewardPayload): void {
+  channel?.send({ type: 'broadcast', event: 'kill-reward', payload });
 }
 
 export function isRoomHost(): boolean {

@@ -39,6 +39,8 @@ import {
   setMembersHandler,
   setDamageHandler,
   broadcastDamage,
+  setKillRewardHandler,
+  broadcastKillReward,
   getLatestMembers,
   type PartyMember,
   type MonsterSyncPayload,
@@ -66,6 +68,7 @@ interface GuestMonster {
   fromT: number;
   toT: number;
   snapshotAt: number;
+  intervalMs: number;
 }
 
 interface CoopPlacedUnit {
@@ -148,8 +151,17 @@ export class CoopGameScene extends Phaser.Scene {
       this.startHostSimulation();
     } else {
       setMonsterSyncHandler((payload) => this.handleSnapshot(payload));
+      setKillRewardHandler((payload) => this.grantMana(payload.kind as MonsterKindId));
       this.layoutWaiting();
     }
+  }
+
+  // 몬스터를 잡으면 마나를 번다 (솔로 모드와 동일). 협동전에서는 누가 막타를 쳤든
+  // 다 같이 잡은 거라 보고, 그 자리에 있던 파티원 전원의 마나가 함께 오른다.
+  private grantMana(kindId: MonsterKindId): void {
+    const reward = MONSTER_KINDS[kindId]?.manaReward ?? 1;
+    this.economy = { ...this.economy, mana: this.economy.mana + reward };
+    this.refreshHud();
   }
 
   private deckPool(): UnitDef[] {
@@ -193,8 +205,13 @@ export class CoopGameScene extends Phaser.Scene {
 
   // 파티원 쪽은 초당 몇 번(SYNC_INTERVAL_MS 간격)만 위치를 받기 때문에, 그 사이는
   // 이전 위치→새 위치를 부드럽게 이어서 그린다 (안 그러면 뚝뚝 끊겨 보인다).
+  // 실제 도착 간격은 인터넷 상태에 따라 150ms보다 들쑥날쑥할 수 있어서, 고정값 대신
+  // "직전 두 번의 실제 도착 간격"을 재서 그 시간에 맞춰 보간한다 (끊김 완화).
+  // 타이머는 Phaser 게임 루프(rAF)가 아니라 실제 시계(Date.now)를 기준으로 재서,
+  // 브라우저 탭이 잠깐 느려져도 위치가 튀지 않고 항상 "지금 시각 기준 정확한 위치"로
+  // 보정된다.
   private updateGuestInterpolation(): void {
-    const now = this.time.now;
+    const now = Date.now();
     this.guestMonsters.forEach((entry) => {
       const t = this.interpolatedT(entry, now);
       const point = this.monsterPath.getPoint(t);
@@ -203,7 +220,7 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private interpolatedT(entry: GuestMonster, now: number): number {
-    const progress = Phaser.Math.Clamp((now - entry.snapshotAt) / SYNC_INTERVAL_MS, 0, 1);
+    const progress = Phaser.Math.Clamp((now - entry.snapshotAt) / entry.intervalMs, 0, 1);
     return Phaser.Math.Linear(entry.fromT, entry.toT, progress);
   }
 
@@ -294,6 +311,8 @@ export class CoopGameScene extends Phaser.Scene {
     if (monster.hp <= 0) {
       monster.sprite.destroy();
       this.hostMonsters = this.hostMonsters.filter((m) => m.id !== monsterId);
+      this.grantMana(monster.kind);
+      broadcastKillReward({ kind: monster.kind });
     }
   }
 
@@ -392,7 +411,7 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private reconcileMonsters(snapshot: MonsterSyncPayload['monsters']): void {
-    const now = this.time.now;
+    const now = Date.now();
     const seen = new Set<number>();
 
     snapshot.forEach((m) => {
@@ -403,14 +422,24 @@ export class CoopGameScene extends Phaser.Scene {
         const sprite = this.createMonsterSprite(m.kind as MonsterKindId, m.species);
         const point = this.monsterPath.getPoint(m.t);
         sprite.setPosition(point.x, point.y);
-        this.guestMonsters.set(m.id, { sprite, fromT: m.t, toT: m.t, snapshotAt: now });
+        this.guestMonsters.set(m.id, {
+          sprite,
+          fromT: m.t,
+          toT: m.t,
+          snapshotAt: now,
+          intervalMs: SYNC_INTERVAL_MS,
+        });
         return;
       }
 
       // 지금 보간 중이던 위치를 새 시작점으로 삼아야 순간이동 없이 자연스럽게 이어진다.
+      // 이번에 실제로 걸린 시간을 다음 보간 구간 길이로 써서, 네트워크가 들쭉날쭉해도
+      // "잠깐 멈췄다가 순간이동"하는 대신 실제 도착 속도에 맞춰 계속 흐르게 한다.
+      const measuredInterval = Phaser.Math.Clamp(now - existing.snapshotAt, 60, 600);
       existing.fromT = this.interpolatedT(existing, now);
       existing.toT = m.t;
       existing.snapshotAt = now;
+      existing.intervalMs = measuredInterval;
     });
 
     for (const [id, entry] of this.guestMonsters) {

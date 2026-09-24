@@ -143,9 +143,10 @@ export class CodexScene extends Phaser.Scene {
     const category = ROLE_CATEGORIES[unit.role] ?? '';
     const categoryColor = CATEGORY_COLORS[category] ?? '#9a917d';
 
-    const nameTop = cardTop + cardH * 0.08;
+    // 이름/분류/특성 세 줄을 먼저 만들어 높이를 잰 뒤, 박스 세로 중앙(y)에 맞춰
+    // 전체 블록을 다시 배치한다.
     const nameText = this.add
-      .text(textCx, nameTop, `${sigil?.label ?? unit.role}`, {
+      .text(textCx, 0, `${sigil?.label ?? unit.role}`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(centerFontSize)}px`,
         color: '#f0e9d8',
@@ -155,9 +156,8 @@ export class CodexScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    const categoryTop = nameTop + nameText.height + centerLineGap;
     const categoryText = this.add
-      .text(textCx, categoryTop, category, {
+      .text(textCx, 0, category, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(centerFontSize)}px`,
         color: categoryColor,
@@ -165,9 +165,8 @@ export class CodexScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    const descTop = categoryTop + categoryText.height + centerLineGap;
-    this.add
-      .text(textCx, descTop, ROLE_DESCRIPTIONS[unit.role] ?? '', {
+    const descText = this.add
+      .text(textCx, 0, ROLE_DESCRIPTIONS[unit.role] ?? '', {
         fontFamily: TITLE_FONT,
         fontSize: `${px(centerFontSize)}px`,
         color: '#9fd8ff',
@@ -175,6 +174,14 @@ export class CodexScene extends Phaser.Scene {
         wordWrap: { width: textWrapWidth },
       })
       .setOrigin(0.5, 0);
+
+    const totalCenterHeight = nameText.height + centerLineGap + categoryText.height + centerLineGap + descText.height;
+    let centerTop = y - totalCenterHeight / 2;
+    nameText.setY(centerTop);
+    centerTop += nameText.height + centerLineGap;
+    categoryText.setY(centerTop);
+    centerTop += categoryText.height + centerLineGap;
+    descText.setY(centerTop);
 
     // 우측: 공격/속도/사거리를 각각 한 줄씩, 작은 글씨 + 좁은 여백으로 배치.
     const statsCx = cardX + cardW - statsAreaWidth / 2;

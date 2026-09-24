@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
-import { OBTAINABLE_UNITS, DECK_SIZE, pickRandomUnit, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, pickRandomUnit, type UnitDef } from '../core/units';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
 import { loadSavedDeck, saveDeck } from '../meta/deck';
-import { ensureStarterCollection, addToCollection } from '../meta/collection';
+import { ensureStarterCollection, addToCollection, loadCollection, saveCollection } from '../meta/collection';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -54,7 +54,7 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   private ownedUnits(): UnitDef[] {
-    return OBTAINABLE_UNITS.filter((u) => this.ownedCounts.has(u.id));
+    return NORMAL_UNITS.filter((u) => this.ownedCounts.has(u.id));
   }
 
   private layout(): void {
@@ -92,6 +92,17 @@ export class DeckSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.drawGacha());
     gachaButton.setPadding(px(8), px(8), px(8), px(8));
+
+    const devButton = this.add
+      .text(px(12), height * 0.045, '[개발자] 전체 획득', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(10)}px`,
+        color: '#5a5a5a',
+      })
+      .setOrigin(0, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.devUnlockAll());
+    devButton.setPadding(px(8), px(8), px(8), px(8));
 
     const owned = this.ownedUnits();
     const cols = 4;
@@ -217,6 +228,18 @@ export class DeckSelectScene extends Phaser.Scene {
       delay: 400,
       onComplete: () => popup.destroy(),
     });
+  }
+
+  private devUnlockAll(): void {
+    let collection = loadCollection();
+    NORMAL_UNITS.forEach((unit) => {
+      if (!collection.includes(unit.id)) {
+        collection = [...collection, unit.id];
+      }
+    });
+    saveCollection(collection);
+    this.rebuildOwnedCounts(collection);
+    this.layout();
   }
 
   private toggleUnit(id: string): void {

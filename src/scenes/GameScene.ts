@@ -9,7 +9,7 @@ import {
 } from '../core/board';
 import { computeMonsterPath, createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
 import { MONSTER_KINDS, type MonsterKindId } from '../core/monsters';
-import { NORMAL_UNITS, pickRandomUnit, ROLE_ATTACK_COLORS, MAX_STAR, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, pickRandomUnit, ROLE_ATTACK_COLORS, MAX_STAR, type UnitDef, type UnitEffect } from '../core/units';
 import {
   tickStatusEffects,
   applySlow,
@@ -281,7 +281,9 @@ export class GameScene extends Phaser.Scene {
       const attack = Math.round(placed.unit.attack * statMultiplier(enhanceLevel));
 
       if (placed.unit.role === 'multishot') {
-        const targets = this.findNearestMonsters(cell.x, cell.y, rangePx, 2);
+        const effect = placed.unit.effects.find((e) => e.type === 'multishot');
+        const shotCount = (effect?.count as number) ?? 2;
+        const targets = this.findNearestMonsters(cell.x, cell.y, rangePx, shotCount);
         if (targets.length === 0) return;
         placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
         targets.forEach((target) => this.performAttack(cell, target, placed.unit, attack));
@@ -430,16 +432,21 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (unitDef.role === 'pierce') {
+      const effect = unitDef.effects.find((e) => e.type === 'pierce');
+      const bandWidth = ((effect?.bandWidth as number) ?? 0.5) * this.cellSize;
+
       this.monsters.forEach((other) => {
         if (other === target || !other.active) return;
-        if (Math.abs(other.x - target.x) <= this.cellSize * 0.5) {
+        if (Math.abs(other.x - target.x) <= bandWidth) {
           this.dealDamage(other, attack, '#fff5d6');
         }
       });
     }
 
     if (unitDef.role === 'chain') {
-      this.chainBounce(target.x, target.y, attack, new Set([target]), 2);
+      const effect = unitDef.effects.find((e) => e.type === 'chain');
+      const bounces = (effect?.bounces as number) ?? 2;
+      this.chainBounce(target.x, target.y, attack, new Set([target]), bounces);
     }
   }
 
@@ -447,10 +454,13 @@ export class GameScene extends Phaser.Scene {
     let damage = attack;
 
     if (unitDef.role === 'execute') {
+      const effect = unitDef.effects.find((e) => e.type === 'execute');
+      const threshold = (effect?.threshold as number) ?? 0.25;
+      const multiplier = (effect?.multiplier as number) ?? 1.8;
       const hp = target.getData('hp') as number;
       const maxHp = (target.getData('maxHp') as number) ?? hp;
-      if (maxHp > 0 && hp / maxHp <= 0.25) {
-        damage = Math.round(damage * 1.8);
+      if (maxHp > 0 && hp / maxHp <= threshold) {
+        damage = Math.round(damage * multiplier);
       }
     }
 
@@ -527,6 +537,18 @@ export class GameScene extends Phaser.Scene {
     const effect = unitDef.effects[0];
     if (!effect) return;
 
+    this.applyStatusEffect(target, effect);
+
+    const extraTargets = ((effect.targets as number) ?? 1) - 1;
+    if (extraTargets > 0) {
+      const nearby = this.findNearestMonsters(target.x, target.y, this.cellSize * 1.8, extraTargets + 1).filter(
+        (m) => m !== target,
+      );
+      nearby.slice(0, extraTargets).forEach((m) => this.applyStatusEffect(m, effect));
+    }
+  }
+
+  private applyStatusEffect(target: Phaser.GameObjects.Image, effect: UnitEffect): void {
     let status = (target.getData('status') as StatusEffects) ?? {};
 
     switch (effect.type) {

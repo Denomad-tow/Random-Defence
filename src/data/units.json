@@ -298,5 +298,155 @@
     "attackSpeed": 0.85,
     "range": 2,
     "effects": [{ "type": "critStrike", "chance": 0.25, "multiplier": 3 }]
+  },
+  {
+    "id": "single_rare",
+    "name": "강철 검사",
+    "rarity": "rare",
+    "role": "single",
+    "attack": 31,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": []
+  },
+  {
+    "id": "aoe_rare",
+    "name": "폭염 대주술사",
+    "rarity": "rare",
+    "role": "aoe",
+    "attack": 14,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "aoe", "radius": 1.5 }]
+  },
+  {
+    "id": "slow_rare",
+    "name": "빙결 대마법사",
+    "rarity": "rare",
+    "role": "slow",
+    "attack": 17,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "slow", "value": 0.3, "duration": 1.7, "targets": 2 }]
+  },
+  {
+    "id": "stun_rare",
+    "name": "충격 대전사",
+    "rarity": "rare",
+    "role": "stun",
+    "attack": 15,
+    "attackSpeed": 0.9,
+    "range": 1,
+    "effects": [{ "type": "stun", "chance": 0.3, "duration": 1.2, "targets": 2 }]
+  },
+  {
+    "id": "poison_rare",
+    "name": "역병 대주술사",
+    "rarity": "rare",
+    "role": "poison",
+    "attack": 10,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "poison", "value": 8, "duration": 3.5, "targets": 2 }]
+  },
+  {
+    "id": "armorBreak_rare",
+    "name": "파쇄 대전사",
+    "rarity": "rare",
+    "role": "armorBreak",
+    "attack": 15,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "armorBreak", "value": 0.3, "duration": 2.5, "targets": 2 }]
+  },
+  {
+    "id": "buff_rare",
+    "name": "성가 대사제",
+    "rarity": "rare",
+    "role": "buff",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 3,
+    "effects": [{ "type": "buff", "stat": "attackSpeed", "value": 0.3 }]
+  },
+  {
+    "id": "goldGen_rare",
+    "name": "대연금술사",
+    "rarity": "rare",
+    "role": "goldGen",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 0,
+    "effects": [{ "type": "goldGen", "value": 4, "interval": 1.8 }]
+  },
+  {
+    "id": "pierce_rare",
+    "name": "장창 용병",
+    "rarity": "rare",
+    "role": "pierce",
+    "attack": 24,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "pierce", "bandWidth": 0.8 }]
+  },
+  {
+    "id": "multishot_rare",
+    "name": "삼시위 용병",
+    "rarity": "rare",
+    "role": "multishot",
+    "attack": 12,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "multishot", "count": 3 }]
+  },
+  {
+    "id": "chain_rare",
+    "name": "감전 대주술사",
+    "rarity": "rare",
+    "role": "chain",
+    "attack": 14,
+    "attackSpeed": 1.05,
+    "range": 2,
+    "effects": [{ "type": "chain", "bounces": 3 }]
+  },
+  {
+    "id": "execute_rare",
+    "name": "암살 대가",
+    "rarity": "rare",
+    "role": "execute",
+    "attack": 20,
+    "attackSpeed": 0.95,
+    "range": 1,
+    "effects": [{ "type": "execute", "threshold": 0.35, "multiplier": 2.0 }]
+  },
+  {
+    "id": "manaLeech_rare",
+    "name": "마나포식 대주술사",
+    "rarity": "rare",
+    "role": "manaLeech",
+    "attack": 12,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "manaLeech", "chance": 0.45, "value": 4 }]
+  },
+  {
+    "id": "frostAura_rare",
+    "name": "냉기결계 대주술사",
+    "rarity": "rare",
+    "role": "frostAura",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 3,
+    "effects": [{ "type": "frostAura", "value": 0.35 }]
+  },
+  {
+    "id": "critStrike_rare",
+    "name": "일격 대가",
+    "rarity": "rare",
+    "role": "critStrike",
+    "attack": 17,
+    "attackSpeed": 0.9,
+    "range": 2,
+    "effects": [{ "type": "critStrike", "chance": 0.3, "multiplier": 3.2 }]
   }
 ]

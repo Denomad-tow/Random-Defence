@@ -45,6 +45,16 @@ export async function isAdmin(): Promise<boolean> {
   }
 }
 
+export async function listNicknames(): Promise<string[]> {
+  try {
+    const { data, error } = await supabase.rpc('admin_list_nicknames');
+    if (error || !data) return [];
+    return (data as Array<{ nickname: string }>).map((row) => row.nickname);
+  } catch {
+    return [];
+  }
+}
+
 export async function findUserByNickname(nickname: string): Promise<string | null> {
   try {
     const { data, error } = await supabase.rpc('admin_find_user_by_nickname', { p_nickname: nickname });

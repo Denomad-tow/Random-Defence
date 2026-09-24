@@ -1,4 +1,4 @@
-import { sendMail, findUserByNickname } from '../meta/mail';
+import { sendMail, findUserByNickname, listNicknames } from '../meta/mail';
 import { BOX_TYPES } from '../meta/gacha';
 
 const STYLE_ID = 'rd-admin-mail-style';
@@ -192,15 +192,34 @@ export function mountAdminMailOverlay(onSent: () => void): void {
   nicknameTab.textContent = '특정 닉네임';
   recipientTabs.appendChild(nicknameTab);
 
-  const nicknameInput = document.createElement('input');
-  nicknameInput.type = 'text';
-  nicknameInput.maxLength = 12;
-  nicknameInput.placeholder = '받는 사람 닉네임';
+  const nicknameSelect = document.createElement('select');
+  const loadingOption = document.createElement('option');
+  loadingOption.value = '';
+  loadingOption.textContent = '불러오는 중...';
+  nicknameSelect.appendChild(loadingOption);
   const nicknameField = document.createElement('div');
   nicknameField.className = 'rd-admin-field';
   nicknameField.style.display = 'none';
-  nicknameField.appendChild(nicknameInput);
+  nicknameField.appendChild(nicknameSelect);
   form.appendChild(nicknameField);
+
+  void listNicknames().then((nicknames) => {
+    nicknameSelect.innerHTML = '';
+    if (nicknames.length === 0) {
+      const emptyOption = document.createElement('option');
+      emptyOption.value = '';
+      emptyOption.textContent = '가입된 닉네임이 없어요';
+      nicknameSelect.appendChild(emptyOption);
+      return;
+    }
+
+    nicknames.forEach((nick) => {
+      const option = document.createElement('option');
+      option.value = nick;
+      option.textContent = nick;
+      nicknameSelect.appendChild(option);
+    });
+  });
 
   function setRecipientMode(mode: 'all' | 'nickname'): void {
     recipientMode = mode;
@@ -298,9 +317,9 @@ export function mountAdminMailOverlay(onSent: () => void): void {
 
     let recipientId: string | null = null;
     if (recipientMode === 'nickname') {
-      const nickname = nicknameInput.value.trim();
+      const nickname = nicknameSelect.value.trim();
       if (!nickname) {
-        status.textContent = '받는 사람 닉네임을 입력해주세요';
+        status.textContent = '받는 사람 닉네임을 선택해주세요';
         return;
       }
 

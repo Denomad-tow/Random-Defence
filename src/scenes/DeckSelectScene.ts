@@ -8,7 +8,7 @@ import { ensureStarterCollection } from '../meta/collection';
 import { loadGold } from '../meta/gold';
 import { loadBoxes } from '../meta/boxes';
 import { sortByRarityThenLevel } from '../meta/unitSort';
-import { signOut } from '../meta/auth';
+import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
 import { px } from '../core/dpr';
 
@@ -27,6 +27,8 @@ export class DeckSelectScene extends Phaser.Scene {
   private forceEdit = false;
   private activeSlot = 0;
   private page = 0;
+  private nickname = '';
+  private nicknameText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('deck-select');
@@ -53,6 +55,11 @@ export class DeckSelectScene extends Phaser.Scene {
     this.selected = new Set(validSaved.slice(0, DECK_SIZE));
     this.layout();
     this.scale.on('resize', () => this.layout());
+
+    void getCurrentNickname().then((nick) => {
+      this.nickname = nick ?? '';
+      this.nicknameText?.setText(this.nickname ? `${this.nickname}님` : '');
+    });
   }
 
   private switchSlot(index: number): void {
@@ -83,6 +90,14 @@ export class DeckSelectScene extends Phaser.Scene {
 
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#07080d');
+
+    this.nicknameText = this.add
+      .text(px(12), px(12), this.nickname ? `${this.nickname}님` : '', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#9fd8ff',
+      })
+      .setOrigin(0, 0);
 
     this.add
       .text(width / 2, height * 0.05, '덱을 선택하세요', {
@@ -123,17 +138,21 @@ export class DeckSelectScene extends Phaser.Scene {
 
     const navCols = 3;
     const navGap = width * 0.025;
-    const navWidth = (width * 0.94 - navGap * (navCols - 1)) / navCols;
-    const navHeight = height * 0.05;
+    const navSlotWidth = (width * 0.94 - navGap * (navCols - 1)) / navCols;
+    const navSlotHeight = height * 0.05;
+    // 버튼(상자) 자체 크기는 기존 대비 70%로 줄이되, 칸 간격(navSlotWidth 기준)은
+    // 그대로 둬서 버튼 사이에 여백이 생기도록 한다.
+    const navWidth = navSlotWidth * 0.7;
+    const navHeight = navSlotHeight * 0.7;
     const navRowGap = height * 0.015;
-    const navStartX = width * 0.03 + navWidth / 2;
+    const navStartX = width * 0.03 + navSlotWidth / 2;
     const navTop = height * 0.175;
 
     navButtons.forEach((btn, i) => {
       const col = i % navCols;
       const row = Math.floor(i / navCols);
-      const x = navStartX + col * (navWidth + navGap);
-      const y = navTop + row * (navHeight + navRowGap);
+      const x = navStartX + col * (navSlotWidth + navGap);
+      const y = navTop + row * (navSlotHeight + navRowGap);
       this.drawNavButton(x, y, navWidth, navHeight, btn.label, btn.color, btn.onClick);
     });
 

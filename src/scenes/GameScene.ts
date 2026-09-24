@@ -9,7 +9,7 @@ import {
   type CellPosition,
 } from '../core/board';
 import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
-import { MONSTER_KINDS, type MonsterKindId } from '../core/monsters';
+import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, type MapPreset } from '../core/mapPresets';
 import { NORMAL_UNITS, pickRandomUnit, ROLE_ATTACK_COLORS, MAX_STAR, type UnitDef, type UnitEffect } from '../core/units';
 import {
@@ -37,6 +37,7 @@ import { getBoxType } from '../meta/gacha';
 import { computeRunReward, type RunReward } from '../meta/rewards';
 import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { generalAttackMultiplier, generalAttackSpeedBonus, roleMultiplier } from '../meta/research';
+import { getCurrentNickname } from '../meta/auth';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -89,6 +90,8 @@ export class GameScene extends Phaser.Scene {
   private rangeGraphics?: Phaser.GameObjects.Graphics;
   private rangeToggleText?: Phaser.GameObjects.Text;
   private enhanceConfirmContainer?: Phaser.GameObjects.Container;
+  private currentNickname = '';
+  private nicknameText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('game');
@@ -125,6 +128,12 @@ export class GameScene extends Phaser.Scene {
 
     this.layout();
     this.scale.on('resize', () => this.layout());
+
+    void getCurrentNickname().then((nick) => {
+      this.currentNickname = nick ?? '';
+      this.nicknameText?.setText(this.currentNickname ? `${this.currentNickname}님` : '');
+    });
+
     this.firstSpawnTimer = this.time.delayedCall(FIRST_SPAWN_DELAY_MS, () => {
       this.spawnMonster();
       this.spawnTimer = this.time.addEvent({
@@ -737,6 +746,25 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.refreshStatus();
 
+    const exitButton = this.add
+      .text(px(12), headerHeight * 0.4, '나가기', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(16.5)}px`,
+        color: '#ff9a9a',
+      })
+      .setOrigin(0, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
+    exitButton.setPadding(px(6), px(6), px(6), px(6));
+
+    this.nicknameText = this.add
+      .text(px(12), headerHeight * 0.78, this.currentNickname ? `${this.currentNickname}님` : '', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#9fd8ff',
+      })
+      .setOrigin(0, 0.5);
+
     const deckButton = this.add
       .text(width - px(12), headerHeight * 0.4, '덱 변경', {
         fontFamily: TITLE_FONT,
@@ -1339,11 +1367,12 @@ export class GameScene extends Phaser.Scene {
     this.refreshHud();
 
     const kind = MONSTER_KINDS[result.kind];
+    const species = pickRandomSpecies();
     const hp = Math.round(kind.baseHp * stageHpMultiplier(result.stage));
 
     const size = Math.round(this.cellSize * kind.sizeRatio);
-    const textureKey = `monster-${kind.id}-${size}`;
-    createMonsterTexture(this, textureKey, size, kind);
+    const textureKey = `monster-${kind.id}-${species.id}-${size}`;
+    createMonsterTexture(this, textureKey, size, { ...kind, shape: species.id });
 
     const start = this.monsterPath.getPoint(0);
     const monster = this.add.image(start.x, start.y, textureKey);

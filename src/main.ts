@@ -7,6 +7,7 @@ import { CollectionScene } from './scenes/CollectionScene';
 import { ResearchScene } from './scenes/ResearchScene';
 import { MailboxScene } from './scenes/MailboxScene';
 import { CodexScene } from './scenes/CodexScene';
+import { PartyScene } from './scenes/PartyScene';
 import { DPR } from './core/dpr';
 import { hasSession } from './meta/auth';
 import { mountLoginOverlay } from './core/loginOverlay';
@@ -20,7 +21,7 @@ function startGame(): void {
     type: Phaser.AUTO,
     parent: 'app',
     backgroundColor: '#07080d',
-    scene: [DeckSelectScene, GameScene, BoxScene, CollectionScene, ResearchScene, MailboxScene, CodexScene],
+    scene: [DeckSelectScene, GameScene, BoxScene, CollectionScene, ResearchScene, MailboxScene, CodexScene, PartyScene],
     scale: {
       mode: Phaser.Scale.NONE,
       zoom: 1 / DPR,

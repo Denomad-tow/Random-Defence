@@ -134,10 +134,13 @@ export class DeckSelectScene extends Phaser.Scene {
       { label: '컬렉션', color: '#9fd8ff', onClick: () => this.scene.start('collection') },
       { label: '도감', color: '#c9a8ff', onClick: () => this.scene.start('codex') },
       { label: '우편함', color: '#ffb0e0', onClick: () => this.scene.start('mailbox') },
+      { label: '파티', color: '#ffcf6b', onClick: () => this.scene.start('party') },
       { label: '로그아웃', color: '#ff9a9a', onClick: () => this.handleLogout() },
     ];
 
-    const navCols = 3;
+    // 버튼이 6개→7개로 늘어난 만큼 4열로 바꿔서, 세로로 줄이 하나 더 늘어나
+    // 아래 덱 편집 영역과 겹치는 일이 없도록 한다.
+    const navCols = 4;
     const navGap = width * 0.025;
     const navSlotWidth = (width * 0.94 - navGap * (navCols - 1)) / navCols;
     const navSlotHeight = height * 0.05;

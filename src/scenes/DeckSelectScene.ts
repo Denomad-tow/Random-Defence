@@ -8,6 +8,7 @@ import { ensureStarterCollection, loadCollection, saveCollection } from '../meta
 import { loadGold } from '../meta/gold';
 import { loadBoxes } from '../meta/boxes';
 import { sortByRarityThenLevel } from '../meta/unitSort';
+import { signOut } from '../meta/auth';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -82,11 +83,39 @@ export class DeckSelectScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#07080d');
 
-    this.add
-      .text(width / 2, height * 0.045, '덱을 선택하세요', {
+    const devButton = this.add
+      .text(px(10), px(10), '[개발자] 전체 획득', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(22)}px`,
+        fontSize: `${px(10)}px`,
+        color: '#5a5a5a',
+      })
+      .setOrigin(0, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.devUnlockAll());
+    devButton.setPadding(px(8), px(8), px(8), px(8));
+
+    this.add
+      .text(width / 2, height * 0.05, '덱을 선택하세요', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(24)}px`,
         color: '#f6e6b4',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(width / 2, height * 0.093, `보유한 유닛 중 ${DECK_SIZE}종을 고르세요`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#9a917d',
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(width / 2, height * 0.125, `골드 ${loadGold()}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(15)}px`,
+        color: '#ffd98a',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
@@ -94,62 +123,25 @@ export class DeckSelectScene extends Phaser.Scene {
     const boxes = loadBoxes();
     const totalBoxes = Object.values(boxes).reduce((sum, n) => sum + n, 0);
 
-    this.add
-      .text(width / 2, height * 0.085, `보유한 유닛 중 ${DECK_SIZE}종을 고르세요 · 골드 ${loadGold()}`, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
-        color: '#9a917d',
-      })
-      .setOrigin(0.5);
+    const navY = height * 0.175;
+    const navGap = width * 0.025;
+    const navWidth = (width * 0.94 - navGap * 3) / 4;
+    const navHeight = height * 0.05;
+    const navStartX = width * 0.03 + navWidth / 2;
 
-    const boxButton = this.add
-      .text(width - px(12), height * 0.04, `상자 (${totalBoxes})`, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color: '#ffd98a',
-        fontStyle: 'bold',
-      })
-      .setOrigin(1, 0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('box'));
-    boxButton.setPadding(px(8), px(8), px(8), px(8));
+    const navButtons: Array<{ label: string; color: string; onClick: () => void }> = [
+      { label: '연구', color: '#a8ffb0', onClick: () => this.scene.start('research') },
+      { label: `상자 (${totalBoxes})`, color: '#ffd98a', onClick: () => this.scene.start('box') },
+      { label: '컬렉션', color: '#9fd8ff', onClick: () => this.scene.start('collection') },
+      { label: '로그아웃', color: '#ff9a9a', onClick: () => this.handleLogout() },
+    ];
 
-    const collectionButton = this.add
-      .text(width - px(12), height * 0.09, '컬렉션', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
-        color: '#9fd8ff',
-        fontStyle: 'bold',
-      })
-      .setOrigin(1, 0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('collection'));
-    collectionButton.setPadding(px(8), px(8), px(8), px(8));
+    navButtons.forEach((btn, i) => {
+      const x = navStartX + i * (navWidth + navGap);
+      this.drawNavButton(x, navY, navWidth, navHeight, btn.label, btn.color, btn.onClick);
+    });
 
-    const devButton = this.add
-      .text(px(12), height * 0.045, '[개발자] 전체 획득', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(10)}px`,
-        color: '#5a5a5a',
-      })
-      .setOrigin(0, 0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.devUnlockAll());
-    devButton.setPadding(px(8), px(8), px(8), px(8));
-
-    const researchButton = this.add
-      .text(px(12), height * 0.09, '연구', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
-        color: '#a8ffb0',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0, 0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('research'));
-    researchButton.setPadding(px(8), px(8), px(8), px(8));
-
-    this.drawSlotTabs(width, height * 0.13);
+    this.drawSlotTabs(width, height * 0.23);
 
     const owned = this.ownedUnits();
     const cols = 8;
@@ -161,10 +153,10 @@ export class DeckSelectScene extends Phaser.Scene {
     // for very short screens.
     const rowSpacingFactor = 1.45;
     const lastRowExtra = 1.1;
-    const gridTop = height * 0.18;
+    const gridTop = height * 0.28;
     const rowsFactor = rowSpacingFactor * (rowsPerPage - 1) + lastRowExtra;
     const cardSizeByWidth = width / (cols + 1.4);
-    const cardSizeByHeight = (height * 0.6) / rowsFactor;
+    const cardSizeByHeight = (height * 0.5) / rowsFactor;
     const cardSize = Math.min(cardSizeByWidth, cardSizeByHeight);
     const itemsPerPage = rowsPerPage * cols;
 
@@ -216,15 +208,28 @@ export class DeckSelectScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    const resetWidth = width * 0.2;
+    const resetHeight = height * 0.045;
+    const resetX = width - px(12) - resetWidth / 2;
+
+    const resetBg = this.add.graphics();
+    resetBg.fillStyle(0x2a1616, 0.9);
+    resetBg.fillRoundedRect(resetX - resetWidth / 2, countY - resetHeight / 2, resetWidth, resetHeight, px(8));
+    resetBg.lineStyle(px(1.5), 0xff9a9a, 0.7);
+    resetBg.strokeRoundedRect(resetX - resetWidth / 2, countY - resetHeight / 2, resetWidth, resetHeight, px(8));
+
     this.add
-      .text(width - px(12), countY, '초기화', {
+      .text(resetX, countY, '초기화', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
+        fontSize: `${px(14)}px`,
         color: '#ff9a9a',
+        fontStyle: 'bold',
       })
-      .setOrigin(1, 0.5)
+      .setOrigin(0.5);
+
+    this.add
+      .zone(resetX, countY, resetWidth, resetHeight)
       .setInteractive({ useHandCursor: true })
-      .setPadding(px(8), px(8), px(8), px(8))
       .on('pointerdown', () => this.resetSelection());
 
     const saveBg = this.add.graphics();
@@ -379,6 +384,43 @@ export class DeckSelectScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.switchSlot(i));
     }
+  }
+
+  private drawNavButton(
+    x: number,
+    y: number,
+    buttonWidth: number,
+    buttonHeight: number,
+    label: string,
+    color: string,
+    onClick: () => void,
+  ): void {
+    const bg = this.add.graphics();
+    bg.fillStyle(0x151a28, 0.95);
+    bg.fillRoundedRect(x - buttonWidth / 2, y - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    bg.lineStyle(px(1.5), Phaser.Display.Color.HexStringToColor(color).color, 0.8);
+    bg.strokeRoundedRect(x - buttonWidth / 2, y - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+
+    const fontSize = Math.max(9, Math.round(buttonWidth * 0.135));
+    this.add
+      .text(x, y, label, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(fontSize)}px`,
+        color,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .zone(x, y, buttonWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', onClick);
+  }
+
+  private handleLogout(): void {
+    void signOut().then(() => {
+      window.location.reload();
+    });
   }
 
   private devUnlockAll(): void {

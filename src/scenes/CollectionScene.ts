@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { NORMAL_UNITS, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, ROLE_DESCRIPTIONS, type UnitDef } from '../core/units';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
@@ -10,7 +10,7 @@ import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
-const ROWS_PER_PAGE = 6;
+const ROWS_PER_PAGE = 5;
 const COLS = 3;
 
 export class CollectionScene extends Phaser.Scene {
@@ -107,14 +107,21 @@ export class CollectionScene extends Phaser.Scene {
     cardBg.lineStyle(px(1), 0xd4b36a, 0.4);
     cardBg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(8));
 
-    // Balanced 3-part layout: icon (left) / name+level (center) / level-up
-    // button (right). Icon and button are vertically centered on the card;
-    // the name+level text block is stacked using *measured* heights so a
-    // 2-line name never overlaps the level line below it.
+    // Balanced 3-part layout: icon (left) / name+trait+level (center) /
+    // level-up button (right). Icon and button are vertically centered on
+    // the card; the text block is stacked using *measured* heights so a
+    // 2-line name never overlaps the lines below it.
     const innerPad = cardW * 0.04;
     const iconAreaWidth = cardW * 0.3;
     const buttonAreaWidth = cardW * 0.34;
     const textAreaWidth = cardW - iconAreaWidth - buttonAreaWidth;
+    const buttonWidth = buttonAreaWidth * 0.88;
+    const buttonHeight = cardH * 0.6;
+
+    // Name font matches the level-up button's label size, per user request.
+    const labelFontSize = Math.max(7, Math.round(buttonWidth * 0.13));
+    const costFontSize = Math.max(5.5, Math.round(buttonWidth * 0.09));
+    const nameFontSize = labelFontSize;
 
     const iconSize = Math.min(iconAreaWidth * 0.85, cardH * 0.78);
     const iconX = cardX + iconAreaWidth / 2;
@@ -128,11 +135,11 @@ export class CollectionScene extends Phaser.Scene {
     const textCx = cardX + iconAreaWidth + textAreaWidth / 2;
     const textWrapWidth = textAreaWidth - innerPad;
 
-    const nameTop = cardTop + cardH * 0.2;
+    const nameTop = cardTop + cardH * 0.1;
     const nameText = this.add
       .text(textCx, nameTop, unit.name, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(10)}px`,
+        fontSize: `${px(nameFontSize)}px`,
         color: '#f0e9d8',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -140,11 +147,22 @@ export class CollectionScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    const subTop = nameTop + nameText.height + cardH * 0.05;
+    const traitTop = nameTop + nameText.height + cardH * 0.04;
+    const traitText = this.add
+      .text(textCx, traitTop, ROLE_DESCRIPTIONS[unit.role] ?? '', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(7.5)}px`,
+        color: '#9fd8ff',
+        align: 'center',
+        wordWrap: { width: textWrapWidth },
+      })
+      .setOrigin(0.5, 0);
+
+    const subTop = traitTop + traitText.height + cardH * 0.04;
     this.add
       .text(textCx, subTop, `Lv.${level} · ${count}개`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(8)}px`,
+        fontSize: `${px(7)}px`,
         color: '#9a917d',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -152,7 +170,7 @@ export class CollectionScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     const buttonX = cardX + cardW - buttonAreaWidth / 2;
-    this.drawLevelUpButton(unit, count, level, buttonX, y, buttonAreaWidth * 0.88, cardH * 0.6);
+    this.drawLevelUpButton(unit, count, level, buttonX, y, buttonWidth, buttonHeight, labelFontSize, costFontSize);
   }
 
   private drawLevelUpButton(
@@ -163,10 +181,9 @@ export class CollectionScene extends Phaser.Scene {
     y: number,
     buttonWidth: number,
     buttonHeight: number,
+    labelFontSize: number,
+    costFontSize: number,
   ): void {
-    const labelFontSize = Math.max(7.5, Math.round(buttonWidth * 0.14));
-    const costFontSize = Math.max(6, Math.round(buttonWidth * 0.1));
-
     if (level >= MAX_UNIT_LEVEL) {
       this.add
         .text(x, y, 'MAX', {

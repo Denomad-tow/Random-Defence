@@ -30,6 +30,25 @@ export function pickRandomUnit(pool: UnitDef[] = NORMAL_UNITS): UnitDef {
   return pool[index];
 }
 
+// 컬렉션 화면 등에서 보여주는 역할별 짧은 특성 설명.
+export const ROLE_DESCRIPTIONS: Record<string, string> = {
+  single: '강력한 단일 공격',
+  aoe: '범위 내 다중 공격',
+  slow: '이동속도 감소',
+  stun: '확률로 기절',
+  poison: '지속 피해(독)',
+  armorBreak: '방어력 감소',
+  buff: '공격속도 증가',
+  goldGen: '마나 생성',
+  pierce: '관통 공격',
+  multishot: '다중 사격',
+  chain: '사슬 번개',
+  execute: '확인사살',
+  manaLeech: '마나 흡수',
+  frostAura: '냉기 결계',
+  critStrike: '치명 강타',
+};
+
 export const ROLE_ATTACK_COLORS: Record<string, number> = {
   single: 0xdfe6f0,
   aoe: 0xff8a3d,

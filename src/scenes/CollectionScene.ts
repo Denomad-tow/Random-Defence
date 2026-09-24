@@ -10,7 +10,7 @@ import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
-const ROWS_PER_PAGE = 6;
+const ROWS_PER_PAGE = 5;
 const COLS = 4;
 
 export class CollectionScene extends Phaser.Scene {
@@ -98,9 +98,10 @@ export class CollectionScene extends Phaser.Scene {
     const pad = colWidth * 0.05;
     const cardX = x0 + pad;
     const cardW = colWidth - pad * 2;
-    const cardTop = y - rowHeight * 0.44;
-    const cardH = rowHeight * 0.88;
+    const cardTop = y - rowHeight * 0.46;
+    const cardH = rowHeight * 0.92;
     const cx = cardX + cardW / 2;
+    const innerPad = cardH * 0.06;
 
     const cardBg = this.add.graphics();
     cardBg.fillStyle(0x151a28, 0.85);
@@ -108,10 +109,14 @@ export class CollectionScene extends Phaser.Scene {
     cardBg.lineStyle(px(1), 0xd4b36a, 0.4);
     cardBg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(6));
 
-    // Stacked vertically (icon / name / level / level-up button) so the
-    // card still reads well at 4-column width.
-    const iconSize = Math.min(cardW * 0.6, cardH * 0.34);
-    const iconY = cardTop + cardH * 0.24;
+    // Level-up button is anchored to the bottom of the card (fixed height);
+    // icon/name/level are stacked top-down using each text's *measured*
+    // height, so a 2-line name can never overlap the line below it.
+    const buttonHeight = cardH * 0.24;
+    const buttonY = cardTop + cardH - buttonHeight / 2 - innerPad * 0.4;
+
+    const iconSize = Math.min(cardW * 0.5, cardH * 0.24);
+    const iconY = cardTop + innerPad + iconSize / 2;
     const sigil = ROLE_SIGILS[unit.role];
     const key = `collicon-${unit.id}-${Math.round(iconSize)}`;
     createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, Math.round(iconSize));
@@ -120,25 +125,28 @@ export class CollectionScene extends Phaser.Scene {
     const count = this.ownedCounts.get(unit.id) ?? 0;
     const level = getUnitLevel(unit.id);
 
-    this.add
-      .text(cx, cardTop + cardH * 0.48, unit.name, {
+    const nameTop = iconY + iconSize / 2 + innerPad * 0.5;
+    const nameText = this.add
+      .text(cx, nameTop, unit.name, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(9)}px`,
+        fontSize: `${px(8)}px`,
         color: '#f0e9d8',
         align: 'center',
-        wordWrap: { width: cardW * 0.96 },
+        wordWrap: { width: cardW * 0.94 },
+        lineSpacing: px(1),
       })
-      .setOrigin(0.5, 0.5);
+      .setOrigin(0.5, 0);
 
+    const subTop = nameTop + nameText.height + innerPad * 0.3;
     this.add
-      .text(cx, cardTop + cardH * 0.65, `Lv.${level} · ${count}개`, {
+      .text(cx, subTop, `Lv.${level} · ${count}개`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(7.5)}px`,
+        fontSize: `${px(7)}px`,
         color: '#9a917d',
       })
-      .setOrigin(0.5, 0.5);
+      .setOrigin(0.5, 0);
 
-    this.drawLevelUpButton(unit, count, level, cx, cardTop + cardH * 0.85, cardW * 0.9, cardH * 0.24);
+    this.drawLevelUpButton(unit, count, level, cx, buttonY, cardW * 0.9, buttonHeight);
   }
 
   private drawLevelUpButton(
@@ -225,22 +233,37 @@ export class CollectionScene extends Phaser.Scene {
 
   private drawPagination(width: number, height: number, totalPages: number): void {
     const y = height * 0.92;
+    const gapX = width * 0.22;
+    const btnRadius = px(18);
 
-    this.add
-      .text(width / 2 - width * 0.2, y, '◀', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(16)}px`,
-        color: this.page > 0 ? '#ffd98a' : '#4a4a4a',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setPadding(px(10), px(10), px(10), px(10))
-      .on('pointerdown', () => {
-        if (this.page > 0) {
-          this.page -= 1;
-          this.layout();
-        }
-      });
+    const drawArrowButton = (x: number, symbol: string, enabled: boolean, onClick: () => void) => {
+      const bg = this.add.graphics();
+      bg.fillStyle(0x1f2536, enabled ? 1 : 0.5);
+      bg.fillCircle(x, y, btnRadius);
+      bg.lineStyle(px(1.5), enabled ? 0xd4b36a : 0x555555, 0.9);
+      bg.strokeCircle(x, y, btnRadius);
+
+      this.add
+        .text(x, y, symbol, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(20)}px`,
+          color: enabled ? '#ffd98a' : '#5a5a5a',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5);
+
+      this.add
+        .zone(x, y, btnRadius * 2.6, btnRadius * 2.6)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (enabled) onClick();
+        });
+    };
+
+    drawArrowButton(width / 2 - gapX, '◀', this.page > 0, () => {
+      this.page -= 1;
+      this.layout();
+    });
 
     this.add
       .text(width / 2, y, `${this.page + 1} / ${totalPages}`, {
@@ -250,21 +273,10 @@ export class CollectionScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.add
-      .text(width / 2 + width * 0.2, y, '▶', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(16)}px`,
-        color: this.page < totalPages - 1 ? '#ffd98a' : '#4a4a4a',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setPadding(px(10), px(10), px(10), px(10))
-      .on('pointerdown', () => {
-        if (this.page < totalPages - 1) {
-          this.page += 1;
-          this.layout();
-        }
-      });
+    drawArrowButton(width / 2 + gapX, '▶', this.page < totalPages - 1, () => {
+      this.page += 1;
+      this.layout();
+    });
   }
 
   private refreshGold(): void {

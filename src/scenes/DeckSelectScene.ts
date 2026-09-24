@@ -187,8 +187,13 @@ export class DeckSelectScene extends Phaser.Scene {
     const countY = cursorY;
     cursorY += height * 0.07;
 
-    const buttonWidth = Math.min(width * 0.65, height * 0.5);
+    const totalButtonWidth = Math.min(width * 0.82, height * 0.62);
     const buttonHeight = height * 0.075;
+    const buttonGap = width * 0.03;
+    const saveWidth = totalButtonWidth * 0.34;
+    const startWidth = totalButtonWidth - saveWidth - buttonGap;
+    const saveX = width / 2 - totalButtonWidth / 2 + saveWidth / 2;
+    const startBtnX = width / 2 + totalButtonWidth / 2 - startWidth / 2;
     const buttonY = cursorY;
 
     this.countText = this.add
@@ -210,23 +215,43 @@ export class DeckSelectScene extends Phaser.Scene {
       .setPadding(px(8), px(8), px(8), px(8))
       .on('pointerdown', () => this.resetSelection());
 
+    const saveBg = this.add.graphics();
+    saveBg.fillStyle(0x151a28, 0.95);
+    saveBg.fillRoundedRect(saveX - saveWidth / 2, buttonY - buttonHeight / 2, saveWidth, buttonHeight, px(10));
+    saveBg.lineStyle(px(2), 0x8fbfff, 0.9);
+    saveBg.strokeRoundedRect(saveX - saveWidth / 2, buttonY - buttonHeight / 2, saveWidth, buttonHeight, px(10));
+
+    this.add
+      .text(saveX, buttonY, '저장', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(15)}px`,
+        color: '#bcdcff',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .zone(saveX, buttonY, saveWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.trySave());
+
     const bg = this.add.graphics();
     bg.fillStyle(0x151a28, 0.95);
-    bg.fillRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(10));
+    bg.fillRoundedRect(startBtnX - startWidth / 2, buttonY - buttonHeight / 2, startWidth, buttonHeight, px(10));
     bg.lineStyle(px(2), 0xd4b36a, 0.9);
-    bg.strokeRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(10));
+    bg.strokeRoundedRect(startBtnX - startWidth / 2, buttonY - buttonHeight / 2, startWidth, buttonHeight, px(10));
 
     this.startButtonText = this.add
-      .text(width / 2, buttonY, '', {
+      .text(startBtnX, buttonY, '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(16)}px`,
+        fontSize: `${px(14)}px`,
         color: '#f6e6b4',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     this.add
-      .zone(width / 2, buttonY, buttonWidth, buttonHeight)
+      .zone(startBtnX, buttonY, startWidth, buttonHeight)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.tryStart());
 
@@ -266,47 +291,50 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   private drawPagination(width: number, y: number, totalPages: number): void {
-    const gapX = width * 0.16;
+    const gapX = width * 0.2;
+    const btnRadius = px(18);
 
-    this.add
-      .text(width / 2 - gapX, y, '◀', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(14)}px`,
-        color: this.page > 0 ? '#ffd98a' : '#4a4a4a',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setPadding(px(10), px(10), px(10), px(10))
-      .on('pointerdown', () => {
-        if (this.page > 0) {
-          this.page -= 1;
-          this.layout();
-        }
-      });
+    const drawArrowButton = (x: number, symbol: string, enabled: boolean, onClick: () => void) => {
+      const bg = this.add.graphics();
+      bg.fillStyle(0x1f2536, enabled ? 1 : 0.5);
+      bg.fillCircle(x, y, btnRadius);
+      bg.lineStyle(px(1.5), enabled ? 0xd4b36a : 0x555555, 0.9);
+      bg.strokeCircle(x, y, btnRadius);
+
+      this.add
+        .text(x, y, symbol, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(20)}px`,
+          color: enabled ? '#ffd98a' : '#5a5a5a',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5);
+
+      this.add
+        .zone(x, y, btnRadius * 2.6, btnRadius * 2.6)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (enabled) onClick();
+        });
+    };
+
+    drawArrowButton(width / 2 - gapX, '◀', this.page > 0, () => {
+      this.page -= 1;
+      this.layout();
+    });
 
     this.add
       .text(width / 2, y, `${this.page + 1} / ${totalPages}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(11)}px`,
+        fontSize: `${px(13)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5);
 
-    this.add
-      .text(width / 2 + gapX, y, '▶', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(14)}px`,
-        color: this.page < totalPages - 1 ? '#ffd98a' : '#4a4a4a',
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true })
-      .setPadding(px(10), px(10), px(10), px(10))
-      .on('pointerdown', () => {
-        if (this.page < totalPages - 1) {
-          this.page += 1;
-          this.layout();
-        }
-      });
+    drawArrowButton(width / 2 + gapX, '▶', this.page < totalPages - 1, () => {
+      this.page += 1;
+      this.layout();
+    });
   }
 
   private drawSlotTabs(width: number, y: number): void {
@@ -395,5 +423,41 @@ export class DeckSelectScene extends Phaser.Scene {
     saveDeckSlot(this.activeSlot, deck);
     saveActiveSlot(this.activeSlot);
     this.scene.start('game', { deck });
+  }
+
+  private trySave(): void {
+    const target = Math.min(DECK_SIZE, this.ownedUnits().length);
+    if (this.selected.size !== target || target === 0) {
+      this.showToast(`${target}종을 모두 골라야 저장할 수 있어요`);
+      return;
+    }
+
+    const deck = Array.from(this.selected);
+    saveDeckSlot(this.activeSlot, deck);
+    saveActiveSlot(this.activeSlot);
+    this.showToast('덱이 저장되었습니다!');
+  }
+
+  private showToast(message: string): void {
+    const { width, height } = this.scale;
+    const toast = this.add
+      .text(width / 2, height * 0.7, message, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#ffe9b0',
+        backgroundColor: '#151a28',
+        padding: { left: px(12), right: px(12), top: px(8), bottom: px(8) },
+      })
+      .setOrigin(0.5)
+      .setDepth(500);
+
+    this.tweens.add({
+      targets: toast,
+      y: toast.y - px(20),
+      alpha: 0,
+      duration: 1100,
+      delay: 500,
+      onComplete: () => toast.destroy(),
+    });
   }
 }

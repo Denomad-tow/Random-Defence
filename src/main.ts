@@ -6,6 +6,8 @@ import { BoxScene } from './scenes/BoxScene';
 import { CollectionScene } from './scenes/CollectionScene';
 import { ResearchScene } from './scenes/ResearchScene';
 import { DPR } from './core/dpr';
+import { hasSession } from './meta/auth';
+import { mountLoginOverlay } from './core/loginOverlay';
 
 function startGame(): void {
   const cssWidth = window.innerWidth;
@@ -33,4 +35,15 @@ function startGame(): void {
   });
 }
 
-document.fonts.ready.then(startGame).catch(startGame);
+async function boot(): Promise<void> {
+  await document.fonts.ready.catch(() => undefined);
+
+  if (await hasSession()) {
+    startGame();
+    return;
+  }
+
+  mountLoginOverlay(startGame);
+}
+
+boot();

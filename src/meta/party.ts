@@ -30,6 +30,12 @@ export interface MonsterSyncPayload {
   monsters: MonsterSnapshot[];
 }
 
+export interface DamageEventPayload {
+  monsterId: number;
+  amount: number;
+  from: string; // 누가 때렸는지(닉네임). 나중에 기여도 보상 계산에 쓸 수 있다.
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
 const CODE_LENGTH = 5;
 
@@ -41,6 +47,7 @@ let latestMembers: PartyMember[] = [];
 let membersHandler: (members: PartyMember[]) => void = () => {};
 let startHandler: () => void = () => {};
 let monsterSyncHandler: (payload: MonsterSyncPayload) => void = () => {};
+let damageHandler: (payload: DamageEventPayload) => void = () => {};
 
 function randomCode(): string {
   let code = '';
@@ -71,6 +78,7 @@ function connect(
   membersHandler = onMembersChange;
   startHandler = onStart;
   monsterSyncHandler = () => {};
+  damageHandler = () => {};
 
   channel = supabase.channel(`party-room-${code}`, {
     config: { presence: { key: nickname } },
@@ -87,6 +95,10 @@ function connect(
 
   channel.on('broadcast', { event: 'monster-sync' }, (msg) => {
     monsterSyncHandler(msg.payload as MonsterSyncPayload);
+  });
+
+  channel.on('broadcast', { event: 'damage' }, (msg) => {
+    damageHandler(msg.payload as DamageEventPayload);
   });
 
   return new Promise((resolve, reject) => {
@@ -131,6 +143,7 @@ export function leaveRoom(): void {
   membersHandler = () => {};
   startHandler = () => {};
   monsterSyncHandler = () => {};
+  damageHandler = () => {};
 }
 
 export function broadcastStart(): void {
@@ -147,6 +160,14 @@ export function setMembersHandler(handler: (members: PartyMember[]) => void): vo
 
 export function broadcastMonsterSync(payload: MonsterSyncPayload): void {
   channel?.send({ type: 'broadcast', event: 'monster-sync', payload });
+}
+
+export function setDamageHandler(handler: (payload: DamageEventPayload) => void): void {
+  damageHandler = handler;
+}
+
+export function broadcastDamage(payload: DamageEventPayload): void {
+  channel?.send({ type: 'broadcast', event: 'damage', payload });
 }
 
 export function isRoomHost(): boolean {

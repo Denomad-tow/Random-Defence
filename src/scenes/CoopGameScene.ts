@@ -1,14 +1,35 @@
 import Phaser from 'phaser';
 import {
   computeBoardLayout,
+  getCellPositions,
+  cellIndex,
   resolveCorridorPoint,
   FIELD_ROWS,
   type BoardLayout,
+  type CellPosition,
 } from '../core/board';
 import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
 import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, MAP_PRESETS, type MapPreset } from '../core/mapPresets';
-import { createNightSkyGlowTexture, createStarFieldTexture, createMonsterTexture } from '../core/graphics/texture';
+import { NORMAL_UNITS, pickRandomUnit, type UnitDef } from '../core/units';
+import {
+  createInitialEconomy,
+  currentSummonCost,
+  canAffordSummon,
+  spendForSummon,
+  type EconomyState,
+} from '../core/economy';
+import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
+import { getCurrentNickname } from '../meta/auth';
+import { getRarity } from '../core/graphics/gem';
+import { ROLE_SIGILS } from '../core/graphics/sigils';
+import {
+  createNightSkyGlowTexture,
+  createStarFieldTexture,
+  createMonsterTexture,
+  createSlotTexture,
+  createGemTexture,
+} from '../core/graphics/texture';
 import type { MonsterShapeId } from '../core/graphics/monster';
 import {
   currentRoomCode,
@@ -16,6 +37,8 @@ import {
   broadcastMonsterSync,
   setMonsterSyncHandler,
   setMembersHandler,
+  setDamageHandler,
+  broadcastDamage,
   getLatestMembers,
   type PartyMember,
   type MonsterSyncPayload,
@@ -45,13 +68,20 @@ interface GuestMonster {
   snapshotAt: number;
 }
 
-// 5단계(협동 파티전) 실시간 동기화의 1번째 조각: 몬스터의 위치·체력을 방장
-// 기기가 계산해서 실시간으로 나머지 파티원에게 전달하고, 파티원은 받은 대로
-// 그대로 그린다. 아직 유닛 배치·공격은 연결되지 않은 "보기 전용" 단계다.
+interface CoopPlacedUnit {
+  unit: UnitDef;
+  cooldown: number;
+  sprite: Phaser.GameObjects.Image;
+}
+
+// 5단계(협동 파티전) 실시간 동기화 2번째 조각: 각자 자기 필드에 유닛을 소환하고,
+// 그 공격이 실제로 "다같이 공유하는" 몬스터 체력을 깎는다. 아직 합성·강화·직업별
+// 특수 효과(독/기절/광역 등)는 연결 안 됨 — 기본 단일 공격 피해만 적용된다.
 export class CoopGameScene extends Phaser.Scene {
   private isHost = false;
   private boardReady = false;
   private monsterPath!: Phaser.Curves.Path;
+  private boardCells: CellPosition[] = [];
   private cellSize = 0;
   private boardStep = 0;
   private fieldBottomY = 0;
@@ -66,9 +96,17 @@ export class CoopGameScene extends Phaser.Scene {
 
   private guestMonsters = new Map<number, GuestMonster>();
 
+  private economy: EconomyState = createInitialEconomy();
+  private placedUnits = new Map<number, CoopPlacedUnit>();
+  private deckUnitIds: string[] = [];
+  private nickname = '';
+
   private members: PartyMember[] = [];
   private hudText?: Phaser.GameObjects.Text;
   private membersText?: Phaser.GameObjects.Text;
+  private summonButtonBg?: Phaser.GameObjects.Graphics;
+  private summonButtonText?: Phaser.GameObjects.Text;
+  private summonButtonGeom = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor() {
     super('coop-game');
@@ -85,7 +123,12 @@ export class CoopGameScene extends Phaser.Scene {
     this.hostMonsters = [];
     this.nextMonsterId = 1;
     this.guestMonsters = new Map();
+    this.economy = createInitialEconomy();
+    this.placedUnits = new Map();
     this.members = getLatestMembers();
+
+    const savedDeck = loadDeckSlot(loadActiveSlot()) ?? [];
+    this.deckUnitIds = savedDeck.length > 0 ? savedDeck : NORMAL_UNITS.filter((u) => u.rarity === 'normal').map((u) => u.id);
 
     this.events.once('shutdown', this.handleShutdown, this);
     setMembersHandler((members) => {
@@ -93,7 +136,12 @@ export class CoopGameScene extends Phaser.Scene {
       this.refreshMembersText();
     });
 
+    void getCurrentNickname().then((nick) => {
+      this.nickname = nick ?? '';
+    });
+
     if (this.isHost) {
+      setDamageHandler((payload) => this.applyDamage(payload.monsterId, payload.amount));
       this.currentMap = pickRandomMapPreset();
       this.layout();
       this.boardReady = true;
@@ -104,13 +152,22 @@ export class CoopGameScene extends Phaser.Scene {
     }
   }
 
+  private deckPool(): UnitDef[] {
+    const pool = NORMAL_UNITS.filter((u) => this.deckUnitIds.includes(u.id));
+    return pool.length > 0 ? pool : NORMAL_UNITS.filter((u) => u.rarity === 'normal');
+  }
+
   update(_time: number, delta: number): void {
     if (!this.boardReady) return;
 
+    const dt = delta / 1000;
+
     if (this.isHost) {
       this.updateHostMonsters(delta);
+      this.updateCombat(dt, true);
     } else {
       this.updateGuestInterpolation();
+      this.updateCombat(dt, false);
     }
   }
 
@@ -126,7 +183,7 @@ export class CoopGameScene extends Phaser.Scene {
       m.sprite.setPosition(point.x, point.y);
     });
 
-    // 1단계에서는 아직 전투/패배 처리가 없어서, 끝에 도달한 몬스터는 그냥 사라진다.
+    // 이번 단계에서는 아직 패배 처리가 없어서, 끝에 도달한 몬스터는 그냥 사라진다.
     const reached = this.hostMonsters.filter((m) => m.t >= 1);
     if (reached.length > 0) {
       reached.forEach((m) => m.sprite.destroy());
@@ -155,6 +212,107 @@ export class CoopGameScene extends Phaser.Scene {
     this.spawnTimer?.remove();
     this.syncTimer?.remove();
     leaveRoom();
+  }
+
+  // ----- 전투: 내가 배치한 유닛이 공유 몬스터를 공격 -----
+  // 이번 단계는 기본 단일 공격 피해만 다룬다 (특성/광역/상태이상은 다음에).
+
+  private updateCombat(dt: number, isHost: boolean): void {
+    this.placedUnits.forEach((placed, index) => {
+      placed.cooldown -= dt;
+      if (placed.cooldown > 0) return;
+
+      const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
+      if (!cell) return;
+
+      if (placed.unit.attack <= 0 || placed.unit.attackSpeed <= 0) {
+        placed.cooldown = 1;
+        return;
+      }
+
+      const rangePx = placed.unit.range * this.boardStep;
+      const target = isHost
+        ? this.findNearestHostMonster(cell.x, cell.y, rangePx)
+        : this.findNearestGuestMonster(cell.x, cell.y, rangePx);
+      if (!target) return;
+
+      placed.cooldown = 1 / placed.unit.attackSpeed;
+
+      if (isHost) {
+        const hostTarget = target as HostMonster;
+        this.applyDamage(hostTarget.id, placed.unit.attack);
+        this.spawnFloatingText(hostTarget.sprite.x, hostTarget.sprite.y, `-${placed.unit.attack}`, '#fff5d6');
+      } else {
+        const guestTarget = target as { id: number; sprite: Phaser.GameObjects.Image };
+        broadcastDamage({ monsterId: guestTarget.id, amount: placed.unit.attack, from: this.nickname });
+        this.spawnFloatingText(guestTarget.sprite.x, guestTarget.sprite.y, `-${placed.unit.attack}`, '#fff5d6');
+      }
+    });
+  }
+
+  private findNearestHostMonster(x: number, y: number, rangePx: number): HostMonster | null {
+    let nearest: HostMonster | null = null;
+    let nearestDist = Infinity;
+
+    this.hostMonsters.forEach((m) => {
+      const dist = Phaser.Math.Distance.Between(x, y, m.sprite.x, m.sprite.y);
+      if (dist <= rangePx && dist < nearestDist) {
+        nearest = m;
+        nearestDist = dist;
+      }
+    });
+
+    return nearest;
+  }
+
+  private findNearestGuestMonster(
+    x: number,
+    y: number,
+    rangePx: number,
+  ): { id: number; sprite: Phaser.GameObjects.Image } | null {
+    let nearest: { id: number; sprite: Phaser.GameObjects.Image } | null = null;
+    let nearestDist = Infinity;
+
+    this.guestMonsters.forEach((entry, id) => {
+      const dist = Phaser.Math.Distance.Between(x, y, entry.sprite.x, entry.sprite.y);
+      if (dist <= rangePx && dist < nearestDist) {
+        nearest = { id, sprite: entry.sprite };
+        nearestDist = dist;
+      }
+    });
+
+    return nearest;
+  }
+
+  // 호스트만 호출: 자기 자신의 공격이든, 파티원에게서 전달받은 피해 이벤트든
+  // 여기로 모여서 "진짜" 공유 체력에 반영된다.
+  private applyDamage(monsterId: number, amount: number): void {
+    const monster = this.hostMonsters.find((m) => m.id === monsterId);
+    if (!monster) return;
+
+    monster.hp = Math.max(0, monster.hp - amount);
+    if (monster.hp <= 0) {
+      monster.sprite.destroy();
+      this.hostMonsters = this.hostMonsters.filter((m) => m.id !== monsterId);
+    }
+  }
+
+  private spawnFloatingText(x: number, y: number, message: string, color: string): void {
+    const text = this.add
+      .text(x, y - px(10), message, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color,
+      })
+      .setOrigin(0.5);
+
+    this.tweens.add({
+      targets: text,
+      y: y - px(40),
+      alpha: 0,
+      duration: 550,
+      onComplete: () => text.destroy(),
+    });
   }
 
   // ----- 호스트: 몬스터 시뮬레이션 -----
@@ -289,21 +447,26 @@ export class CoopGameScene extends Phaser.Scene {
     this.drawBackground(width, height);
 
     const headerHeight = height * 0.08;
-    const fieldTop = height * 0.16;
-    const fieldAreaHeight = height * 0.78;
+    const fieldTop = height * 0.34;
+    const fieldAreaHeight = height * 0.5;
 
     const boardLayout = computeBoardLayout(width, fieldTop, fieldAreaHeight);
+    this.boardCells = getCellPositions(boardLayout);
     this.cellSize = boardLayout.cellSize;
     this.boardStep = boardLayout.cellSize + boardLayout.gap;
 
+    const buttonY = Math.min(height * 0.92, fieldTop + fieldAreaHeight + boardLayout.cellSize * 1.1);
+    const buttonHeight = boardLayout.cellSize * 0.9;
     const naturalFieldBottomY = boardLayout.originY + (FIELD_ROWS - 1) * this.boardStep + boardLayout.cellSize * 0.55;
-    this.fieldBottomY = Math.min(naturalFieldBottomY, height * 0.94);
+    this.fieldBottomY = Math.min(naturalFieldBottomY, buttonY - buttonHeight / 2 - boardLayout.cellSize * 0.35);
 
     const pathPoints = this.resolveMapPathPoints(boardLayout, headerHeight);
     this.monsterPath = this.buildCurve(pathPoints);
     this.drawPath(this.monsterPath);
+    this.drawFieldSlots(this.boardCells, boardLayout.cellSize);
 
     this.drawHeader(width, height);
+    this.drawSummonButton(width / 2, buttonY, Math.min(boardLayout.cellSize * 3.4, width * 0.6), buttonHeight);
   }
 
   private drawHeader(width: number, height: number): void {
@@ -351,7 +514,10 @@ export class CoopGameScene extends Phaser.Scene {
 
   private refreshHud(): void {
     const count = this.isHost ? this.hostMonsters.length : this.guestMonsters.size;
-    this.hudText?.setText(`협동 전투 (베타) · 스테이지 ${this.waveState.stage} · 몬스터 ${count}마리`);
+    this.hudText?.setText(
+      `협동 전투 (베타) · 스테이지 ${this.waveState.stage} · 몬스터 ${count}마리 · 마나 ${this.economy.mana}`,
+    );
+    this.refreshSummonButton();
   }
 
   private refreshMembersText(): void {
@@ -407,6 +573,104 @@ export class CoopGameScene extends Phaser.Scene {
       graphics.lineTo(points[i].x, points[i].y);
     }
     graphics.strokePath();
+  }
+
+  private drawFieldSlots(cells: CellPosition[], cellSize: number): void {
+    const slotKey = `coop-slot-${Math.round(cellSize)}`;
+    createSlotTexture(this, slotKey, Math.round(cellSize));
+    cells.forEach((cell) => {
+      this.add.image(cell.x, cell.y, slotKey);
+    });
+  }
+
+  // ----- 소환 -----
+
+  private drawSummonButton(x: number, y: number, width: number, height: number): void {
+    this.summonButtonGeom = { x, y, w: width, h: height };
+    this.summonButtonBg = this.add.graphics();
+    this.summonButtonText = this.add
+      .text(x, y, '', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(15)}px`,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .zone(x, y, width, height)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.handleSummonTap());
+
+    this.refreshSummonButton();
+  }
+
+  private hasEmptySlot(): boolean {
+    return this.boardCells.some((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
+  }
+
+  private refreshSummonButton(): void {
+    if (!this.summonButtonBg || !this.summonButtonText) return;
+    const { x, y, w, h } = this.summonButtonGeom;
+    const affordable = canAffordSummon(this.economy) && this.hasEmptySlot();
+
+    this.summonButtonBg.clear();
+    this.summonButtonBg.fillStyle(0x151a28, affordable ? 0.95 : 0.5);
+    this.summonButtonBg.fillRoundedRect(x - w / 2, y - h / 2, w, h, px(10));
+    this.summonButtonBg.lineStyle(px(2), affordable ? 0xd4b36a : 0x555555, 0.9);
+    this.summonButtonBg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, px(10));
+
+    const label = this.hasEmptySlot() ? `소환 (${currentSummonCost(this.economy)}마나)` : '필드가 가득 찼어요';
+    this.summonButtonText.setText(label);
+    this.summonButtonText.setColor(affordable ? '#f6e6b4' : '#8a8272');
+  }
+
+  private handleSummonTap(): void {
+    if (!canAffordSummon(this.economy)) return;
+    const emptyCell = this.bestEmptyCell();
+    if (!emptyCell) return;
+
+    this.economy = spendForSummon(this.economy);
+    const unit = pickRandomUnit(this.deckPool());
+    const sprite = this.drawUnitSprite(emptyCell, unit);
+    this.placedUnits.set(cellIndex(emptyCell.row, emptyCell.col), {
+      unit,
+      cooldown: Math.random() * 0.3,
+      sprite,
+    });
+
+    this.refreshHud();
+  }
+
+  // 이번 단계는 칸을 직접 고르는 UI가 없어서, 빈 칸 중 몬스터 길에 가장 가까운
+  // 칸에 자동으로 배치한다 (그래야 소환한 유닛이 실제로 공격할 기회를 잡는다).
+  // 길 전체가 아니라 앞부분(진입 구간)에 가까운 칸을 우선해서, 소환하자마자
+  // 곧 지나가는 몬스터를 때릴 수 있게 한다 (길 끝 쪽에 배치되면 몬스터가 거기까지
+  // 오는 데 시간이 오래 걸려 한참 동안 아무것도 못 때리게 된다).
+  private bestEmptyCell(): CellPosition | null {
+    const empty = this.boardCells.filter((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
+    if (empty.length === 0) return null;
+
+    const earlyPathSamples: { x: number; y: number }[] = [];
+    const sampleCount = 30;
+    for (let i = 0; i <= sampleCount; i += 1) {
+      earlyPathSamples.push(this.monsterPath.getPoint((i / sampleCount) * 0.6));
+    }
+
+    const distanceToPath = (cell: CellPosition): number =>
+      earlyPathSamples.reduce(
+        (min, p) => Math.min(min, Phaser.Math.Distance.Between(cell.x, cell.y, p.x, p.y)),
+        Infinity,
+      );
+
+    return empty.reduce((best, c) => (distanceToPath(c) < distanceToPath(best) ? c : best), empty[0]);
+  }
+
+  private drawUnitSprite(cell: CellPosition, unit: UnitDef): Phaser.GameObjects.Image {
+    const size = Math.round(this.cellSize * 0.86);
+    const sigil = ROLE_SIGILS[unit.role];
+    const key = `coop-unit-${unit.rarity}-${unit.role}-${size}`;
+    createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, size);
+    return this.add.image(cell.x, cell.y, key).setDisplaySize(this.cellSize * 0.86, this.cellSize * 0.86);
   }
 
   private createMonsterSprite(kindId: MonsterKindId, speciesId: string): Phaser.GameObjects.Image {

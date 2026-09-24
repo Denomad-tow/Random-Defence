@@ -3,7 +3,7 @@ import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, type UnitDef } from '../core
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
-import { loadSavedDeck, saveDeck } from '../meta/deck';
+import { loadDeckSlot, saveDeckSlot, loadActiveSlot, saveActiveSlot, DECK_SLOT_COUNT } from '../meta/deck';
 import { ensureStarterCollection, loadCollection, saveCollection } from '../meta/collection';
 import { loadGold } from '../meta/gold';
 import { loadBoxes } from '../meta/boxes';
@@ -22,6 +22,8 @@ export class DeckSelectScene extends Phaser.Scene {
   private countText!: Phaser.GameObjects.Text;
   private startButtonText!: Phaser.GameObjects.Text;
   private forceEdit = false;
+  private activeSlot = 0;
+  private page = 0;
 
   constructor() {
     super('deck-select');
@@ -32,10 +34,12 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.page = 0;
     const collection = ensureStarterCollection(OBTAINABLE_UNITS);
     this.rebuildOwnedCounts(collection);
 
-    const saved = loadSavedDeck();
+    this.activeSlot = loadActiveSlot();
+    const saved = loadDeckSlot(this.activeSlot);
     const validSaved = saved?.filter((id) => this.ownedCounts.has(id)) ?? [];
 
     if (!this.forceEdit && validSaved.length === DECK_SIZE) {
@@ -46,6 +50,17 @@ export class DeckSelectScene extends Phaser.Scene {
     this.selected = new Set(validSaved.slice(0, DECK_SIZE));
     this.layout();
     this.scale.on('resize', () => this.layout());
+  }
+
+  private switchSlot(index: number): void {
+    if (index === this.activeSlot) return;
+
+    this.activeSlot = index;
+    saveActiveSlot(index);
+
+    const saved = loadDeckSlot(index)?.filter((id) => this.ownedCounts.has(id)) ?? [];
+    this.selected = new Set(saved.slice(0, DECK_SIZE));
+    this.layout();
   }
 
   private rebuildOwnedCounts(collection: string[]): void {
@@ -121,9 +136,10 @@ export class DeckSelectScene extends Phaser.Scene {
       .on('pointerdown', () => this.devUnlockAll());
     devButton.setPadding(px(8), px(8), px(8), px(8));
 
+    this.drawSlotTabs(width, height * 0.13);
+
     const owned = this.ownedUnits();
     const cols = 4;
-    const rows = Math.max(1, Math.ceil(owned.length / cols));
 
     // Fixed, cardSize-independent geometry for the bottom UI so the card
     // grid can never grow into it, regardless of screen aspect ratio.
@@ -132,28 +148,39 @@ export class DeckSelectScene extends Phaser.Scene {
     const buttonY = height * 0.94;
     const countY = buttonY - buttonHeight / 2 - height * 0.035;
 
-    const gridTop = height * 0.15;
+    const gridTop = height * 0.18;
     const gridBottom = countY - height * 0.04;
     const availableGridHeight = Math.max(gridBottom - gridTop, height * 0.1);
 
+    // Card size stays comfortable/fixed (width-based); when the collection
+    // grows too large to fit, we paginate instead of shrinking cards further.
     const rowSpacingFactor = 1.6;
     const lastRowExtra = 1.25;
-    const cardSizeByHeight = availableGridHeight / (rowSpacingFactor * (rows - 1) + lastRowExtra);
-    const cardSizeByWidth = width / (cols + 1);
-    const cardSize = Math.min(cardSizeByWidth, cardSizeByHeight);
+    const cardSize = width / (cols + 1);
+    const rowPitch = cardSize * rowSpacingFactor;
+    const rowsPerPage = Math.max(1, Math.floor((availableGridHeight - cardSize * lastRowExtra) / rowPitch) + 1);
+    const itemsPerPage = rowsPerPage * cols;
+
+    const totalPages = Math.max(1, Math.ceil(owned.length / itemsPerPage));
+    this.page = Phaser.Math.Clamp(this.page, 0, totalPages - 1);
+    const pageItems = owned.slice(this.page * itemsPerPage, (this.page + 1) * itemsPerPage);
 
     const gap = cardSize * 0.3;
     const gridWidth = cardSize * cols + gap * (cols - 1);
     const startX = width / 2 - gridWidth / 2 + cardSize / 2;
     const startY = gridTop + cardSize / 2;
 
-    owned.forEach((unit, i) => {
+    pageItems.forEach((unit, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = startX + col * (cardSize + gap);
       const y = startY + row * (cardSize * rowSpacingFactor);
       this.drawCard(unit, x, y, cardSize);
     });
+
+    if (totalPages > 1) {
+      this.drawPagination(width, gridBottom + height * 0.02, totalPages);
+    }
 
     this.countText = this.add
       .text(width / 2, countY, '', {
@@ -218,6 +245,82 @@ export class DeckSelectScene extends Phaser.Scene {
     this.updateCardVisual(unit.id);
   }
 
+  private drawPagination(width: number, y: number, totalPages: number): void {
+    const gapX = width * 0.16;
+
+    this.add
+      .text(width / 2 - gapX, y, '◀', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(14)}px`,
+        color: this.page > 0 ? '#ffd98a' : '#4a4a4a',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(10), px(10), px(10), px(10))
+      .on('pointerdown', () => {
+        if (this.page > 0) {
+          this.page -= 1;
+          this.layout();
+        }
+      });
+
+    this.add
+      .text(width / 2, y, `${this.page + 1} / ${totalPages}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#9a917d',
+      })
+      .setOrigin(0.5);
+
+    this.add
+      .text(width / 2 + gapX, y, '▶', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(14)}px`,
+        color: this.page < totalPages - 1 ? '#ffd98a' : '#4a4a4a',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(10), px(10), px(10), px(10))
+      .on('pointerdown', () => {
+        if (this.page < totalPages - 1) {
+          this.page += 1;
+          this.layout();
+        }
+      });
+  }
+
+  private drawSlotTabs(width: number, y: number): void {
+    const tabWidth = Math.min(width * 0.25, 110);
+    const gap = tabWidth * 0.15;
+    const totalWidth = tabWidth * DECK_SLOT_COUNT + gap * (DECK_SLOT_COUNT - 1);
+    const startX = width / 2 - totalWidth / 2 + tabWidth / 2;
+
+    for (let i = 0; i < DECK_SLOT_COUNT; i += 1) {
+      const x = startX + i * (tabWidth + gap);
+      const active = i === this.activeSlot;
+
+      const bg = this.add.graphics();
+      bg.fillStyle(active ? 0x2a2416 : 0x151a28, active ? 1 : 0.85);
+      bg.fillRoundedRect(x - tabWidth / 2, y - px(14), tabWidth, px(28), px(8));
+      bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x3a3a3a, 1);
+      bg.strokeRoundedRect(x - tabWidth / 2, y - px(14), tabWidth, px(28), px(8));
+
+      this.add
+        .text(x, y, `덱 ${i + 1}`, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(12)}px`,
+          color: active ? '#ffd98a' : '#8a8272',
+          fontStyle: active ? 'bold' : 'normal',
+        })
+        .setOrigin(0.5);
+
+      this.add
+        .zone(x, y, tabWidth, px(28))
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.switchSlot(i));
+    }
+  }
+
   private devUnlockAll(): void {
     let collection = loadCollection();
     NORMAL_UNITS.forEach((unit) => {
@@ -263,7 +366,8 @@ export class DeckSelectScene extends Phaser.Scene {
     if (this.selected.size !== target || target === 0) return;
 
     const deck = Array.from(this.selected);
-    saveDeck(deck);
+    saveDeckSlot(this.activeSlot, deck);
+    saveActiveSlot(this.activeSlot);
     this.scene.start('game', { deck });
   }
 }

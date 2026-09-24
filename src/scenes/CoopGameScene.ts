@@ -107,6 +107,7 @@ export class CoopGameScene extends Phaser.Scene {
   private spawnTimer?: Phaser.Time.TimerEvent;
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
   private syncTimer?: Phaser.Time.TimerEvent;
+  private hostMissingTimer?: Phaser.Time.TimerEvent;
 
   private guestMonsters = new Map<number, GuestMonster>();
 
@@ -149,6 +150,7 @@ export class CoopGameScene extends Phaser.Scene {
     setMembersHandler((members) => {
       this.members = members;
       this.refreshMembersText();
+      if (!this.isHost) this.checkHostPresence(members);
     });
 
     void getCurrentNickname().then((nick) => {
@@ -240,7 +242,37 @@ export class CoopGameScene extends Phaser.Scene {
     this.firstSpawnTimer?.remove();
     this.spawnTimer?.remove();
     this.syncTimer?.remove();
+    this.hostMissingTimer?.remove();
     leaveRoom();
+  }
+
+  // ----- 접속 끊김 처리 -----
+  // 방장 기기만 몬스터를 계산하기 때문에, 방장이 튕기면 파티원 화면은 마지막으로
+  // 받은 모습 그대로 영원히 멈춰버린다. 그래서 파티원 쪽에서 "방장이 목록에서
+  // 사라졌는지"를 지켜보다가, 잠깐의 접속 끊김(네트워크 순간 끊김 등)과 진짜
+  // 나감을 구분하기 위해 5초 정도 기다렸다가 그래도 없으면 전투를 종료해준다.
+  private checkHostPresence(members: PartyMember[]): void {
+    if (this.gameOver) return;
+    const hostPresent = members.some((m) => m.isHost);
+
+    if (hostPresent) {
+      if (this.hostMissingTimer) {
+        this.hostMissingTimer.remove();
+        this.hostMissingTimer = undefined;
+      }
+      return;
+    }
+
+    if (this.hostMissingTimer) return;
+
+    this.hostMissingTimer = this.time.delayedCall(5000, () => {
+      this.hostMissingTimer = undefined;
+      if (this.gameOver) return;
+      const stillMissing = !getLatestMembers().some((m) => m.isHost);
+      if (stillMissing) {
+        this.endRun(this.waveState.stage, '방장 연결이 끊겨서 전투가 끝났어요');
+      }
+    });
   }
 
   // ----- 필드 뚫림 / 전투 종료 -----
@@ -255,37 +287,40 @@ export class CoopGameScene extends Phaser.Scene {
     this.endRun(stage);
   }
 
-  private endRun(stage: number): void {
+  private endRun(stage: number, title = '협동 전투 종료'): void {
     if (this.gameOver) return;
     this.gameOver = true;
     this.firstSpawnTimer?.remove();
     this.spawnTimer?.remove();
     this.syncTimer?.remove();
+    this.hostMissingTimer?.remove();
 
     const reward = computeRunReward(stage);
     addGold(reward.gold);
     addBox(reward.boxId);
 
-    this.showGameOverOverlay(stage, reward);
+    this.showGameOverOverlay(stage, reward, title);
   }
 
-  private showGameOverOverlay(stage: number, reward: RunReward): void {
+  private showGameOverOverlay(stage: number, reward: RunReward, title: string): void {
     const { width, height } = this.scale;
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(1000);
 
     this.add
-      .text(width / 2, height * 0.34, '협동 전투 종료', {
+      .text(width / 2, height * 0.34, title, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(28)}px`,
+        fontSize: `${px(title.length > 10 ? 20 : 28)}px`,
         color: '#ffd98a',
         fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: width * 0.88 },
       })
       .setOrigin(0.5)
       .setDepth(1001);
 
     this.add
-      .text(width / 2, height * 0.42, `도달 스테이지 ${stage}`, {
+      .text(width / 2, height * 0.45, `도달 스테이지 ${stage}`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(14)}px`,
         color: '#f6e6b4',
@@ -295,7 +330,7 @@ export class CoopGameScene extends Phaser.Scene {
 
     const boxName = getBoxType(reward.boxId).name;
     this.add
-      .text(width / 2, height * 0.48, `보상: 골드 +${reward.gold} · ${boxName} +1`, {
+      .text(width / 2, height * 0.51, `보상: 골드 +${reward.gold} · ${boxName} +1`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(13)}px`,
         color: '#ffd98a',
@@ -307,7 +342,7 @@ export class CoopGameScene extends Phaser.Scene {
     const buttonWidth = Math.min(refCell * 3.4, width * 0.6);
     const buttonHeight = refCell * 0.9;
 
-    this.drawOverlayButton(width / 2, height * 0.6, buttonWidth, buttonHeight, '덱 선택으로', () =>
+    this.drawOverlayButton(width / 2, height * 0.63, buttonWidth, buttonHeight, '덱 선택으로', () =>
       this.scene.start('deck-select', { forceEdit: true }),
     );
   }

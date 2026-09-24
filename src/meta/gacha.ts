@@ -28,6 +28,12 @@ export const BOX_TYPES: BoxType[] = [
     cardCount: 5,
     weights: { normal: 20, uncommon: 28, rare: 28, epic: 16, legendary: 6, mythic: 2 },
   },
+  {
+    id: 'diamond',
+    name: '다이아 상자',
+    cardCount: 7,
+    weights: { normal: 10, uncommon: 20, rare: 28, epic: 24, legendary: 12, mythic: 6 },
+  },
 ];
 
 export function getBoxType(id: string): BoxType {

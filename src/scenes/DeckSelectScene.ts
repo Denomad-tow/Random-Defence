@@ -132,6 +132,7 @@ export class DeckSelectScene extends Phaser.Scene {
       { label: '연구', color: '#a8ffb0', onClick: () => this.scene.start('research') },
       { label: `상자 (${totalBoxes})`, color: '#ffd98a', onClick: () => this.scene.start('box') },
       { label: '컬렉션', color: '#9fd8ff', onClick: () => this.scene.start('collection') },
+      { label: '도감', color: '#c9a8ff', onClick: () => this.scene.start('codex') },
       { label: '우편함', color: '#ffb0e0', onClick: () => this.scene.start('mailbox') },
       { label: '로그아웃', color: '#ff9a9a', onClick: () => this.handleLogout() },
     ];

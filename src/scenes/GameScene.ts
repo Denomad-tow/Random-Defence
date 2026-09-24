@@ -773,17 +773,6 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5);
 
-    const deckButton = this.add
-      .text(width - px(12), headerHeight * 0.4, '덱 변경', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(16.5)}px`,
-        color: '#9a917d',
-      })
-      .setOrigin(1, 0.5)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
-    deckButton.setPadding(px(6), px(6), px(6), px(6));
-
     this.rangeToggleText = this.add
       .text(width - px(12), headerHeight * 0.78, this.showRange ? '사거리 끄기' : '사거리 보기', {
         fontFamily: TITLE_FONT,

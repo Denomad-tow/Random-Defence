@@ -49,6 +49,25 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   critStrike: '치명 강타',
 };
 
+// 도감에서 보여주는 역할 분류(공격형/제어형/버프형/자원형).
+export const ROLE_CATEGORIES: Record<string, string> = {
+  single: '공격형',
+  aoe: '공격형',
+  pierce: '공격형',
+  multishot: '공격형',
+  chain: '공격형',
+  execute: '공격형',
+  critStrike: '공격형',
+  poison: '공격형',
+  slow: '제어형',
+  stun: '제어형',
+  armorBreak: '제어형',
+  frostAura: '제어형',
+  buff: '버프형',
+  goldGen: '자원형',
+  manaLeech: '자원형',
+};
+
 export const ROLE_ATTACK_COLORS: Record<string, number> = {
   single: 0xdfe6f0,
   aoe: 0xff8a3d,

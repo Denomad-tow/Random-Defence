@@ -42,16 +42,16 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(width / 2, height * 0.055, '연구', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(22)}px`,
+        fontSize: `${px(33)}px`,
         color: '#f6e6b4',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     this.goldText = this.add
-      .text(width / 2, height * 0.095, '', {
+      .text(width / 2, height * 0.105, '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
+        fontSize: `${px(18)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5);
@@ -69,7 +69,7 @@ export class ResearchScene extends Phaser.Scene {
       .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
 
     // 일반 연구: 모든 유닛에 공통 적용되는 전투 능력치 2종.
-    const generalTop = height * 0.13;
+    const generalTop = height * 0.145;
     const generalHeight = height * 0.1;
     const generalGap = width * 0.03;
     const generalWidth = (width * 0.92 - generalGap) / 2;
@@ -112,7 +112,7 @@ export class ResearchScene extends Phaser.Scene {
     const costFontSize = Math.max(8, Math.round(buttonWidth * 0.1));
 
     this.add
-      .text(labelX, y - cardH * 0.22, getGeneralLabel(key), {
+      .text(labelX, y - cardH * 0.28, getGeneralLabel(key), {
         fontFamily: TITLE_FONT,
         fontSize: `${px(labelFontSize)}px`,
         color: '#f0e9d8',
@@ -120,7 +120,7 @@ export class ResearchScene extends Phaser.Scene {
       .setOrigin(0, 0.5);
 
     this.add
-      .text(labelX, y + cardH * 0.05, `Lv.${level}/${MAX_RESEARCH_LEVEL}`, {
+      .text(labelX, y + cardH * 0.2, `Lv.${level}/${MAX_RESEARCH_LEVEL}`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(costFontSize)}px`,
         color: '#9a917d',

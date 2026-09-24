@@ -7,6 +7,7 @@ import { loadDeckSlot, saveDeckSlot, loadActiveSlot, saveActiveSlot, DECK_SLOT_C
 import { ensureStarterCollection, loadCollection, saveCollection } from '../meta/collection';
 import { loadGold } from '../meta/gold';
 import { loadBoxes } from '../meta/boxes';
+import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -71,7 +72,7 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   private ownedUnits(): UnitDef[] {
-    return NORMAL_UNITS.filter((u) => this.ownedCounts.has(u.id));
+    return sortByRarityThenLevel(NORMAL_UNITS.filter((u) => this.ownedCounts.has(u.id)));
   }
 
   private layout(): void {
@@ -139,7 +140,7 @@ export class DeckSelectScene extends Phaser.Scene {
     this.drawSlotTabs(width, height * 0.13);
 
     const owned = this.ownedUnits();
-    const cols = 4;
+    const cols = 6;
 
     // Fixed, cardSize-independent geometry for the bottom UI so the card
     // grid can never grow into it, regardless of screen aspect ratio.
@@ -152,11 +153,11 @@ export class DeckSelectScene extends Phaser.Scene {
     const gridBottom = countY - height * 0.04;
     const availableGridHeight = Math.max(gridBottom - gridTop, height * 0.1);
 
-    // Card size stays comfortable/fixed (width-based); when the collection
-    // grows too large to fit, we paginate instead of shrinking cards further.
-    const rowSpacingFactor = 1.6;
-    const lastRowExtra = 1.25;
-    const cardSize = width / (cols + 1);
+    // Smaller, denser cards than before so most/all owned units fit on one
+    // screen; when the collection still overflows, we paginate on top of this.
+    const rowSpacingFactor = 1.45;
+    const lastRowExtra = 1.1;
+    const cardSize = width / (cols + 1.4);
     const rowPitch = cardSize * rowSpacingFactor;
     const rowsPerPage = Math.max(1, Math.floor((availableGridHeight - cardSize * lastRowExtra) / rowPitch) + 1);
     const itemsPerPage = rowsPerPage * cols;
@@ -165,7 +166,7 @@ export class DeckSelectScene extends Phaser.Scene {
     this.page = Phaser.Math.Clamp(this.page, 0, totalPages - 1);
     const pageItems = owned.slice(this.page * itemsPerPage, (this.page + 1) * itemsPerPage);
 
-    const gap = cardSize * 0.3;
+    const gap = cardSize * 0.22;
     const gridWidth = cardSize * cols + gap * (cols - 1);
     const startX = width / 2 - gridWidth / 2 + cardSize / 2;
     const startY = gridTop + cardSize / 2;

@@ -6,6 +6,7 @@ import { createGemTexture } from '../core/graphics/texture';
 import { loadCollection, consumeDuplicates } from '../meta/collection';
 import { loadGold, spendGold } from '../meta/gold';
 import { getUnitLevel, setUnitLevel, levelUpCost, availableDuplicates, MAX_UNIT_LEVEL } from '../meta/levels';
+import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -35,7 +36,7 @@ export class CollectionScene extends Phaser.Scene {
   }
 
   private ownedUnits(): UnitDef[] {
-    return NORMAL_UNITS.filter((u) => this.ownedCounts.has(u.id));
+    return sortByRarityThenLevel(NORMAL_UNITS.filter((u) => this.ownedCounts.has(u.id)));
   }
 
   private layout(): void {

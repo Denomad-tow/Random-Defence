@@ -10,7 +10,7 @@ import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
-const ROWS_PER_PAGE = 5;
+const ROWS_PER_PAGE = 4;
 const COLS = 4;
 
 export class CollectionScene extends Phaser.Scene {
@@ -109,27 +109,29 @@ export class CollectionScene extends Phaser.Scene {
     cardBg.lineStyle(px(1), 0xd4b36a, 0.4);
     cardBg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(6));
 
+    // Icon is the dominant visual (bigger than the text) so units are told
+    // apart by their gem color/sigil at a glance, not just by name text.
     // Level-up button is anchored to the bottom of the card (fixed height);
-    // icon/name/level are stacked top-down using each text's *measured*
-    // height, so a 2-line name can never overlap the line below it.
-    const buttonHeight = cardH * 0.24;
+    // name/level are stacked top-down below the icon using each text's
+    // *measured* height, so a 2-line name can never overlap the line below.
+    const buttonHeight = cardH * 0.2;
     const buttonY = cardTop + cardH - buttonHeight / 2 - innerPad * 0.4;
 
-    const iconSize = Math.min(cardW * 0.5, cardH * 0.24);
+    const iconSize = Math.min(cardW * 0.72, cardH * 0.44);
     const iconY = cardTop + innerPad + iconSize / 2;
     const sigil = ROLE_SIGILS[unit.role];
     const key = `collicon-${unit.id}-${Math.round(iconSize)}`;
     createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, Math.round(iconSize));
-    this.add.image(cx, iconY, key).setDisplaySize(iconSize * 0.92, iconSize * 0.92);
+    this.add.image(cx, iconY, key).setDisplaySize(iconSize * 0.96, iconSize * 0.96);
 
     const count = this.ownedCounts.get(unit.id) ?? 0;
     const level = getUnitLevel(unit.id);
 
-    const nameTop = iconY + iconSize / 2 + innerPad * 0.5;
+    const nameTop = iconY + iconSize / 2 + innerPad * 0.4;
     const nameText = this.add
       .text(cx, nameTop, unit.name, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(8)}px`,
+        fontSize: `${px(7.5)}px`,
         color: '#f0e9d8',
         align: 'center',
         wordWrap: { width: cardW * 0.94 },
@@ -137,11 +139,11 @@ export class CollectionScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    const subTop = nameTop + nameText.height + innerPad * 0.3;
+    const subTop = nameTop + nameText.height + innerPad * 0.25;
     this.add
       .text(cx, subTop, `Lv.${level} · ${count}개`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(7)}px`,
+        fontSize: `${px(6.5)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5, 0);

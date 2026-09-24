@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import { NORMAL_UNITS, DECK_SIZE, type UnitDef } from '../core/units';
+import { OBTAINABLE_UNITS, DECK_SIZE, pickRandomUnit, type UnitDef } from '../core/units';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
 import { loadSavedDeck, saveDeck } from '../meta/deck';
+import { ensureStarterCollection, addToCollection } from '../meta/collection';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -14,6 +15,7 @@ interface CardRef {
 
 export class DeckSelectScene extends Phaser.Scene {
   private selected = new Set<string>();
+  private ownedCounts = new Map<string, number>();
   private cardRefs = new Map<string, CardRef>();
   private countText!: Phaser.GameObjects.Text;
   private startButtonText!: Phaser.GameObjects.Text;
@@ -28,8 +30,11 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   create(): void {
+    const collection = ensureStarterCollection(OBTAINABLE_UNITS);
+    this.rebuildOwnedCounts(collection);
+
     const saved = loadSavedDeck();
-    const validSaved = saved?.filter((id) => NORMAL_UNITS.some((u) => u.id === id)) ?? [];
+    const validSaved = saved?.filter((id) => this.ownedCounts.has(id)) ?? [];
 
     if (!this.forceEdit && validSaved.length === DECK_SIZE) {
       this.scene.start('game', { deck: validSaved });
@@ -39,6 +44,17 @@ export class DeckSelectScene extends Phaser.Scene {
     this.selected = new Set(validSaved.slice(0, DECK_SIZE));
     this.layout();
     this.scale.on('resize', () => this.layout());
+  }
+
+  private rebuildOwnedCounts(collection: string[]): void {
+    this.ownedCounts = new Map();
+    collection.forEach((id) => {
+      this.ownedCounts.set(id, (this.ownedCounts.get(id) ?? 0) + 1);
+    });
+  }
+
+  private ownedUnits(): UnitDef[] {
+    return OBTAINABLE_UNITS.filter((u) => this.ownedCounts.has(u.id));
   }
 
   private layout(): void {
@@ -58,15 +74,28 @@ export class DeckSelectScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, height * 0.085, `이번 판에서 소환할 유닛 ${DECK_SIZE}종을 고르세요`, {
+      .text(width / 2, height * 0.085, `보유한 유닛 중 ${DECK_SIZE}종을 고르세요`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(12)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5);
 
+    const gachaButton = this.add
+      .text(width - px(12), height * 0.045, '뽑기', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#ffd98a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.drawGacha());
+    gachaButton.setPadding(px(8), px(8), px(8), px(8));
+
+    const owned = this.ownedUnits();
     const cols = 4;
-    const rows = Math.ceil(NORMAL_UNITS.length / cols);
+    const rows = Math.max(1, Math.ceil(owned.length / cols));
 
     // Fixed, cardSize-independent geometry for the bottom UI so the card
     // grid can never grow into it, regardless of screen aspect ratio.
@@ -75,7 +104,7 @@ export class DeckSelectScene extends Phaser.Scene {
     const buttonY = height * 0.94;
     const countY = buttonY - buttonHeight / 2 - height * 0.035;
 
-    const gridTop = height * 0.13;
+    const gridTop = height * 0.15;
     const gridBottom = countY - height * 0.04;
     const availableGridHeight = Math.max(gridBottom - gridTop, height * 0.1);
 
@@ -90,7 +119,7 @@ export class DeckSelectScene extends Phaser.Scene {
     const startX = width / 2 - gridWidth / 2 + cardSize / 2;
     const startY = gridTop + cardSize / 2;
 
-    NORMAL_UNITS.forEach((unit, i) => {
+    owned.forEach((unit, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = startX + col * (cardSize + gap);
@@ -144,9 +173,11 @@ export class DeckSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.toggleUnit(unit.id));
 
+    const count = this.ownedCounts.get(unit.id) ?? 1;
+    const nameLabel = count > 1 ? `${unit.name} ×${count}` : unit.name;
     const labelFontSize = Math.max(8, Math.round(size * 0.19));
     this.add
-      .text(x, y + size * 0.62, unit.name, {
+      .text(x, y + size * 0.62, nameLabel, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(labelFontSize)}px`,
         color: '#c9c2af',
@@ -157,6 +188,35 @@ export class DeckSelectScene extends Phaser.Scene {
 
     this.cardRefs.set(unit.id, { ring });
     this.updateCardVisual(unit.id);
+  }
+
+  private drawGacha(): void {
+    const drawn = pickRandomUnit(OBTAINABLE_UNITS);
+    const collection = addToCollection(drawn.id);
+    this.rebuildOwnedCounts(collection);
+    this.layout();
+
+    const { width, height } = this.scale;
+    const isNew = (this.ownedCounts.get(drawn.id) ?? 0) === 1;
+    const message = isNew ? `새 유닛 획득! ${drawn.name}` : `${drawn.name} 획득 (중복)`;
+
+    const popup = this.add
+      .text(width / 2, height * 0.19, message, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(14)}px`,
+        color: '#ffe9b0',
+      })
+      .setOrigin(0.5)
+      .setDepth(500);
+
+    this.tweens.add({
+      targets: popup,
+      y: popup.y - px(24),
+      alpha: 0,
+      duration: 1300,
+      delay: 400,
+      onComplete: () => popup.destroy(),
+    });
   }
 
   private toggleUnit(id: string): void {
@@ -181,13 +241,16 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   private refreshSelectionUI(): void {
-    this.countText.setText(`선택 ${this.selected.size}/${DECK_SIZE}`);
-    const ready = this.selected.size === DECK_SIZE;
-    this.startButtonText.setText(ready ? '시작' : `${DECK_SIZE}종을 골라주세요`);
+    const target = Math.min(DECK_SIZE, this.ownedUnits().length);
+    this.countText.setText(`선택 ${this.selected.size}/${target}`);
+    const ready = this.selected.size === target && target > 0;
+    this.startButtonText.setText(ready ? '시작' : `${target}종을 골라주세요`);
   }
 
   private tryStart(): void {
-    if (this.selected.size !== DECK_SIZE) return;
+    const target = Math.min(DECK_SIZE, this.ownedUnits().length);
+    if (this.selected.size !== target || target === 0) return;
+
     const deck = Array.from(this.selected);
     saveDeck(deck);
     this.scene.start('game', { deck });

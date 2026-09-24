@@ -19,6 +19,11 @@ export interface UnitDef {
 export const NORMAL_UNITS: UnitDef[] = unitsData as UnitDef[];
 export const DECK_SIZE = 5;
 export const MAX_STAR = 7;
+export const STARTER_COUNT = 5;
+
+// 지금 단계에서 실제로 얻을 수 있는 유닛 풀. 고급 이상 등급은 나중에
+// 강화/뽑기 등급 체계가 갖춰지면 연다.
+export const OBTAINABLE_UNITS: UnitDef[] = NORMAL_UNITS.filter((u) => u.rarity === 'normal');
 
 export function pickRandomUnit(pool: UnitDef[] = NORMAL_UNITS): UnitDef {
   const index = Math.floor(Math.random() * pool.length);

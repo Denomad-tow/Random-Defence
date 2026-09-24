@@ -9,6 +9,7 @@ import {
   type CellPosition,
 } from '../core/board';
 import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
+import { coopHpMultiplier } from '../core/coopBalance';
 import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, MAP_PRESETS, type MapPreset } from '../core/mapPresets';
 import { NORMAL_UNITS, pickRandomUnit, type UnitDef } from '../core/units';
@@ -536,7 +537,8 @@ export class CoopGameScene extends Phaser.Scene {
 
     const kind = MONSTER_KINDS[result.kind];
     const species = pickRandomSpecies();
-    const hp = Math.round(kind.baseHp * stageHpMultiplier(result.stage));
+    const partySize = Math.max(1, getLatestMembers().length);
+    const hp = Math.round(kind.baseHp * stageHpMultiplier(result.stage) * coopHpMultiplier(partySize));
 
     const sprite = this.createMonsterSprite(result.kind, species.id);
     const start = this.monsterPath.getPoint(0);
@@ -857,7 +859,9 @@ export class CoopGameScene extends Phaser.Scene {
 
   private refreshMembersText(): void {
     const names = this.members.map((m) => `${m.nickname}${m.isHost ? '(방장)' : ''}`).join(', ');
-    this.membersText?.setText(names ? `함께: ${names}` : '');
+    const multiplier = coopHpMultiplier(Math.max(1, this.members.length));
+    const difficultyNote = multiplier > 1 ? ` · 몬스터 체력 x${multiplier.toFixed(1)}` : '';
+    this.membersText?.setText(names ? `함께: ${names}${difficultyNote}` : '');
   }
 
   private drawBackground(width: number, height: number): void {

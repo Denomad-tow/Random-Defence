@@ -48,6 +48,8 @@ import {
   broadcastKillReward,
   setGameOverHandler,
   broadcastGameOver,
+  setGameSpeedHandler,
+  broadcastGameSpeed,
   getLatestMembers,
   type PartyMember,
   type MonsterSyncPayload,
@@ -124,6 +126,9 @@ export class CoopGameScene extends Phaser.Scene {
   private summonButtonText?: Phaser.GameObjects.Text;
   private summonButtonGeom = { x: 0, y: 0, w: 0, h: 0 };
   private confirmModalContainer?: Phaser.GameObjects.Container;
+  private gameSpeed = 1;
+  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text }>();
+  private speedText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('coop-game');
@@ -144,6 +149,9 @@ export class CoopGameScene extends Phaser.Scene {
     this.economy = createInitialEconomy();
     this.placedUnits = new Map();
     this.members = getLatestMembers();
+    this.gameSpeed = 1;
+    this.time.timeScale = 1;
+    this.tweens.timeScale = 1;
 
     const savedDeck = loadDeckSlot(loadActiveSlot()) ?? [];
     this.deckUnitIds = savedDeck.length > 0 ? savedDeck : NORMAL_UNITS.filter((u) => u.rarity === 'normal').map((u) => u.id);
@@ -169,6 +177,7 @@ export class CoopGameScene extends Phaser.Scene {
       setMonsterSyncHandler((payload) => this.handleSnapshot(payload));
       setKillRewardHandler((payload) => this.grantMana(payload.kind as MonsterKindId));
       setGameOverHandler((payload) => this.endRun(payload.stage));
+      setGameSpeedHandler((payload) => this.applyGameSpeed(payload.value));
       this.layoutWaiting();
     }
   }
@@ -189,10 +198,10 @@ export class CoopGameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (!this.boardReady || this.gameOver) return;
 
-    const dt = delta / 1000;
+    const dt = (delta / 1000) * this.gameSpeed;
 
     if (this.isHost) {
-      this.updateHostMonsters(delta);
+      this.updateHostMonsters(dt);
       this.updateCombat(dt, true);
     } else {
       this.updateGuestInterpolation();
@@ -200,8 +209,7 @@ export class CoopGameScene extends Phaser.Scene {
     }
   }
 
-  private updateHostMonsters(delta: number): void {
-    const dt = delta / 1000;
+  private updateHostMonsters(dt: number): void {
     const pathLength = this.monsterPath.getLength();
 
     this.hostMonsters.forEach((m) => {
@@ -681,6 +689,7 @@ export class CoopGameScene extends Phaser.Scene {
     this.drawFieldSlots(this.boardCells, boardLayout.cellSize);
 
     this.drawHeader(width, height);
+    this.drawSpeedRow(width, headerHeight);
     this.drawSummonButton(width / 2, buttonY, Math.min(boardLayout.cellSize * 3.4, width * 0.6), buttonHeight);
   }
 
@@ -862,6 +871,113 @@ export class CoopGameScene extends Phaser.Scene {
     const multiplier = coopHpMultiplier(Math.max(1, this.members.length));
     const difficultyNote = multiplier > 1 ? ` · 몬스터 체력 x${multiplier.toFixed(1)}` : '';
     this.membersText?.setText(names ? `함께: ${names}${difficultyNote}` : '');
+  }
+
+  // ----- 배속(솔로 모드와 동일한 1x/2x/4x/8x) -----
+  // 실제 몬스터 이동·스폰을 계산하는 건 방장뿐이라, 배속도 방장만 조절할 수 있다.
+  // 방장이 바꾸면 파티원에게도 알려줘서, 파티원 화면의 유닛 공격 속도도 같이
+  // 빨라지게 맞춘다(몬스터 위치 자체는 방장이 보내주는 값을 그대로 따라가므로
+  // 이미 저절로 빨라져 있다).
+
+  private drawSpeedRow(width: number, headerHeight: number): void {
+    if (this.isHost) {
+      this.drawSpeedControls(width / 2, headerHeight * 1.18);
+    } else {
+      this.speedText = this.add
+        .text(width / 2, headerHeight * 1.18, '', {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(12)}px`,
+          color: '#8a8272',
+        })
+        .setOrigin(0.5);
+      this.refreshSpeedText();
+    }
+  }
+
+  private drawSpeedControls(centerX: number, y: number): void {
+    this.speedButtonRefs = new Map();
+
+    const speeds = [1, 2, 4, 8];
+    const gap = px(10);
+    const labelWidths = speeds.map((s) => `${s}x`.length);
+    const totalWidth = labelWidths.reduce((sum, len) => sum + len * px(11) + px(16), 0) + gap * (speeds.length - 1);
+    let cursorX = centerX - totalWidth / 2;
+
+    speeds.forEach((speed) => {
+      const label = `${speed}x`;
+      const active = speed === this.gameSpeed;
+
+      const text = this.add
+        .text(0, y, label, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(12)}px`,
+          color: active ? '#ffd98a' : '#8a8272',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0, 0.5);
+
+      const btnWidth = text.width + px(16);
+      text.setX(cursorX + px(8));
+
+      const bg = this.add.graphics();
+      bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
+      bg.fillRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
+      bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
+      bg.strokeRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
+      this.children.moveBelow(bg, text);
+
+      text.setOrigin(0.5, 0.5);
+      text.setX(cursorX + btnWidth / 2);
+
+      this.add
+        .zone(cursorX + btnWidth / 2, y, btnWidth, px(22))
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.setGameSpeed(speed));
+
+      this.speedButtonRefs.set(speed, { bg, text });
+      cursorX += btnWidth + gap;
+    });
+  }
+
+  // 방장 전용: 배속 버튼을 눌렀을 때. 자기 화면에 바로 적용하고 파티원에게도 전달한다.
+  private setGameSpeed(value: number): void {
+    this.applyGameSpeed(value);
+    broadcastGameSpeed({ value });
+  }
+
+  // 방장·파티원 공통: 실제로 배속 값을 적용한다.
+  private applyGameSpeed(value: number): void {
+    this.gameSpeed = value;
+    this.time.timeScale = value;
+    this.tweens.timeScale = value;
+
+    this.speedButtonRefs.forEach((refs, btnValue) => {
+      const active = btnValue === value;
+      refs.bg.clear();
+      refs.bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
+      refs.bg.fillRoundedRect(
+        refs.text.x - refs.text.width / 2 - px(8),
+        refs.text.y - px(11),
+        refs.text.width + px(16),
+        px(22),
+        px(6),
+      );
+      refs.bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
+      refs.bg.strokeRoundedRect(
+        refs.text.x - refs.text.width / 2 - px(8),
+        refs.text.y - px(11),
+        refs.text.width + px(16),
+        px(22),
+        px(6),
+      );
+      refs.text.setColor(active ? '#ffd98a' : '#8a8272');
+    });
+
+    this.refreshSpeedText();
+  }
+
+  private refreshSpeedText(): void {
+    this.speedText?.setText(this.gameSpeed === 1 ? '배속 1x (방장 설정)' : `배속 ${this.gameSpeed}x (방장 설정)`);
   }
 
   private drawBackground(width: number, height: number): void {

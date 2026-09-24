@@ -13,6 +13,7 @@ export interface PartyMember {
   nickname: string;
   isHost: boolean;
   joinedAt: number;
+  maxSize?: number; // 방장 항목에만 있음: 이 방이 받을 수 있는 최대 인원(2~5)
 }
 
 export interface MonsterSnapshot {
@@ -44,6 +45,10 @@ export interface GameOverPayload {
   stage: number; // 도달한 스테이지. 각자 이 숫자로 자기 몫의 보상을 계산한다.
 }
 
+export interface GameSpeedPayload {
+  value: number; // 1/2/4/8
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
 const CODE_LENGTH = 5;
 
@@ -58,6 +63,8 @@ let monsterSyncHandler: (payload: MonsterSyncPayload) => void = () => {};
 let damageHandler: (payload: DamageEventPayload) => void = () => {};
 let killRewardHandler: (payload: KillRewardPayload) => void = () => {};
 let gameOverHandler: (payload: GameOverPayload) => void = () => {};
+let gameSpeedHandler: (payload: GameSpeedPayload) => void = () => {};
+let roomFullHandler: () => void = () => {};
 
 function randomCode(): string {
   let code = '';
@@ -81,6 +88,7 @@ function connect(
   isHost: boolean,
   onMembersChange: (members: PartyMember[]) => void,
   onStart: () => void,
+  maxSize?: number,
 ): Promise<void> {
   leaveRoom();
   roomCode = code;
@@ -91,6 +99,9 @@ function connect(
   damageHandler = () => {};
   killRewardHandler = () => {};
   gameOverHandler = () => {};
+  gameSpeedHandler = () => {};
+  // roomFullHandler는 leaveRoom()에서 지우지 않는다 — 정원 초과로 스스로 나갈 때
+  // leaveRoom()을 호출한 "다음"에 이 핸들러를 불러야 하기 때문.
 
   channel = supabase.channel(`party-room-${code}`, {
     config: { presence: { key: nickname } },
@@ -99,6 +110,22 @@ function connect(
   channel.on('presence', { event: 'sync' }, () => {
     latestMembers = membersFromPresence();
     membersHandler(latestMembers);
+
+    // 참가자 쪽에서만 정원을 확인한다. 방장이 정해둔 정원(maxSize)보다 늦게
+    // 들어온(joinedAt 기준) 사람은 스스로 방을 나간다. 서버가 없는 구조라
+    // 완벽하게 막을 수는 없지만, 친구끼리 쓰는 캐주얼한 용도로는 충분하다.
+    if (!isHost) {
+      const host = latestMembers.find((m) => m.isHost);
+      const cap = host?.maxSize;
+      if (cap) {
+        const sorted = [...latestMembers].sort((a, b) => a.joinedAt - b.joinedAt);
+        const myIndex = sorted.findIndex((m) => m.nickname === nickname);
+        if (myIndex >= cap) {
+          leaveRoom();
+          roomFullHandler();
+        }
+      }
+    }
   });
 
   channel.on('broadcast', { event: 'start' }, () => {
@@ -121,10 +148,16 @@ function connect(
     gameOverHandler(msg.payload as GameOverPayload);
   });
 
+  channel.on('broadcast', { event: 'game-speed' }, (msg) => {
+    gameSpeedHandler(msg.payload as GameSpeedPayload);
+  });
+
   return new Promise((resolve, reject) => {
     channel!.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        void channel!.track({ nickname, isHost, joinedAt: Date.now() } satisfies PartyMember);
+        const member: PartyMember = { nickname, isHost, joinedAt: Date.now() };
+        if (isHost && maxSize) member.maxSize = maxSize;
+        void channel!.track(member);
         resolve();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         reject(new Error('방에 연결하지 못했어요. 다시 시도해주세요.'));
@@ -135,11 +168,12 @@ function connect(
 
 export async function createRoom(
   nickname: string,
+  maxSize: number,
   onMembersChange: (members: PartyMember[]) => void,
   onStart: () => void,
 ): Promise<string> {
   const code = randomCode();
-  await connect(code, nickname, true, onMembersChange, onStart);
+  await connect(code, nickname, true, onMembersChange, onStart, maxSize);
   return code;
 }
 
@@ -166,6 +200,9 @@ export function leaveRoom(): void {
   damageHandler = () => {};
   killRewardHandler = () => {};
   gameOverHandler = () => {};
+  gameSpeedHandler = () => {};
+  // roomFullHandler는 여기서 지우지 않는다 — 정원 초과로 나갈 때는 leaveRoom() 안에서
+  // 호출한 뒤 곧바로 이 핸들러로 알려줘야 하기 때문에, 연결 하나에 묶이지 않는다.
 }
 
 export function broadcastStart(): void {
@@ -206,6 +243,18 @@ export function setGameOverHandler(handler: (payload: GameOverPayload) => void):
 
 export function broadcastGameOver(payload: GameOverPayload): void {
   channel?.send({ type: 'broadcast', event: 'game-over', payload });
+}
+
+export function setGameSpeedHandler(handler: (payload: GameSpeedPayload) => void): void {
+  gameSpeedHandler = handler;
+}
+
+export function broadcastGameSpeed(payload: GameSpeedPayload): void {
+  channel?.send({ type: 'broadcast', event: 'game-speed', payload });
+}
+
+export function setRoomFullHandler(handler: () => void): void {
+  roomFullHandler = handler;
 }
 
 export function isRoomHost(): boolean {

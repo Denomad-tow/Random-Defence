@@ -5,8 +5,12 @@ import {
   broadcastStart,
   isRoomHost,
   currentRoomCode,
+  setRoomFullHandler,
   type PartyMember,
 } from '../meta/party';
+
+const PARTY_SIZE_OPTIONS = [2, 3, 4, 5];
+const DEFAULT_PARTY_SIZE = 4;
 
 const STYLE_ID = 'rd-party-style';
 
@@ -121,6 +125,28 @@ function injectStyle(): void {
       opacity: 0.5;
       cursor: default;
     }
+    .rd-party-size-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .rd-party-size-btn {
+      flex: 1;
+      padding: 8px 0;
+      border-radius: 8px;
+      border: 1.5px solid rgba(212, 179, 106, 0.4);
+      background: #0d1018;
+      color: #9a917d;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .rd-party-size-btn.rd-party-size-active {
+      border-color: #d4b36a;
+      background: #2a2416;
+      color: #ffd98a;
+    }
     .rd-party-error {
       min-height: 14px;
       font-size: 11.5px;
@@ -203,10 +229,18 @@ export function mountPartyOverlay(
   let busy = false;
   let errorMsg = '';
   let codeInputValue = '';
+  let selectedMaxSize = DEFAULT_PARTY_SIZE;
 
   const overlay = document.createElement('div');
   overlay.className = 'rd-party-overlay';
   document.body.appendChild(overlay);
+
+  setRoomFullHandler(() => {
+    view = 'menu';
+    members = [];
+    errorMsg = '방이 꽉 찼어요. 방장에게 다른 방을 만들어달라고 해보세요';
+    render();
+  });
 
   function handleMembersChange(next: PartyMember[]): void {
     members = next;
@@ -223,7 +257,7 @@ export function mountPartyOverlay(
     errorMsg = '';
     render();
 
-    createRoom(nickname, handleMembersChange, handleRoomStart)
+    createRoom(nickname, selectedMaxSize, handleMembersChange, handleRoomStart)
       .then(() => {
         busy = false;
         view = 'waiting';
@@ -316,6 +350,21 @@ export function mountPartyOverlay(
     createTitle.textContent = '방 만들기';
     createSection.appendChild(createTitle);
 
+    const sizeRow = document.createElement('div');
+    sizeRow.className = 'rd-party-size-row';
+    PARTY_SIZE_OPTIONS.forEach((size) => {
+      const sizeBtn = document.createElement('button');
+      sizeBtn.type = 'button';
+      sizeBtn.className = `rd-party-size-btn${size === selectedMaxSize ? ' rd-party-size-active' : ''}`;
+      sizeBtn.textContent = `${size}인`;
+      sizeBtn.addEventListener('click', () => {
+        selectedMaxSize = size;
+        render();
+      });
+      sizeRow.appendChild(sizeBtn);
+    });
+    createSection.appendChild(sizeRow);
+
     const createBtn = document.createElement('button');
     createBtn.type = 'button';
     createBtn.className = 'rd-party-btn';
@@ -399,13 +448,15 @@ export function mountPartyOverlay(
     });
     card.appendChild(list);
 
+    const cap = members.find((m) => m.isHost)?.maxSize ?? selectedMaxSize;
+
     const status = document.createElement('div');
     if (isRoomHost()) {
       status.className = 'rd-party-status';
-      status.textContent = `모인 인원: ${members.length}명 · 준비되면 아래 버튼을 눌러주세요`;
+      status.textContent = `모인 인원: ${members.length}/${cap}명 · 준비되면 아래 버튼을 눌러주세요`;
     } else {
       status.className = 'rd-party-status';
-      status.textContent = '방장이 시작하길 기다리는 중...';
+      status.textContent = `모인 인원: ${members.length}/${cap}명 · 방장이 시작하길 기다리는 중...`;
     }
     card.appendChild(status);
 

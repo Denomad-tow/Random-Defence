@@ -53,6 +53,7 @@ const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
 const FIRST_SPAWN_DELAY_MS = 10000;
 const MAX_MONSTERS_ON_FIELD = 100;
+const DOUBLE_TAP_WINDOW_MS = 320;
 
 interface PlacedUnit {
   unit: UnitDef;
@@ -89,9 +90,11 @@ export class GameScene extends Phaser.Scene {
   private showRange = false;
   private rangeGraphics?: Phaser.GameObjects.Graphics;
   private rangeToggleText?: Phaser.GameObjects.Text;
-  private enhanceConfirmContainer?: Phaser.GameObjects.Container;
+  private confirmModalContainer?: Phaser.GameObjects.Container;
   private currentNickname = '';
   private nicknameText?: Phaser.GameObjects.Text;
+  private lastTapIndex: number | null = null;
+  private lastTapTime = 0;
 
   constructor() {
     super('game');
@@ -695,7 +698,7 @@ export class GameScene extends Phaser.Scene {
   private layout(): void {
     this.children.removeAll(true);
     this.monsters = [];
-    this.enhanceConfirmContainer = undefined;
+    this.confirmModalContainer = undefined;
 
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#07080d');
@@ -754,7 +757,7 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
+      .on('pointerdown', () => this.confirmExit());
     exitButton.setPadding(px(6), px(6), px(6), px(6));
 
     this.nicknameText = this.add
@@ -902,7 +905,8 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => sprite.setData('dragMoved', false))
       .on('pointerup', () => {
-        if (!sprite.getData('dragMoved')) this.handleUnitTap(index);
+        if (sprite.getData('dragMoved')) return;
+        this.registerUnitTap(index);
       });
     sprite.setData('cellIndex', index);
     this.input.setDraggable(sprite);
@@ -971,6 +975,26 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  // 유닛을 놓는 순간 같은 위치의 새 스프라이트가 그 클릭의 pointerup을 대신
+  // 받아버려 "소환하자마자 강화 확인 창이 뜨는" 문제가 있었다. 또한 실수로
+  // 슬롯을 스친 것만으로 강화가 걸리지 않도록, 한 번 탭으로는 아무 일도
+  // 안 일어나고 같은 유닛을 짧은 시간 안에 두 번 탭해야만(더블 탭) 강화
+  // 확인 창이 뜨도록 한다.
+  private registerUnitTap(index: number): void {
+    const now = this.time.now;
+    const isDoubleTap = this.lastTapIndex === index && now - this.lastTapTime < DOUBLE_TAP_WINDOW_MS;
+
+    if (isDoubleTap) {
+      this.lastTapIndex = null;
+      this.lastTapTime = 0;
+      this.handleUnitTap(index);
+      return;
+    }
+
+    this.lastTapIndex = index;
+    this.lastTapTime = now;
+  }
+
   private handleUnitTap(index: number): void {
     const placed = this.placedUnits.get(index);
     if (!placed) return;
@@ -994,12 +1018,39 @@ export class GameScene extends Phaser.Scene {
     this.showEnhanceConfirm(index, placed, level, cost);
   }
 
+  private confirmExit(): void {
+    this.showConfirmModal({
+      title: '게임 진행 중인데 나가시겠습니까?',
+      subtitle: '지금 나가면 이번 판 진행 상황은 저장되지 않아요',
+      confirmLabel: '나가기',
+      confirmColor: '#ff9a9a',
+      onConfirm: () => this.scene.start('deck-select', { forceEdit: true }),
+    });
+  }
+
   private showEnhanceConfirm(index: number, placed: PlacedUnit, level: number, cost: number): void {
-    this.enhanceConfirmContainer?.destroy(true);
+    this.showConfirmModal({
+      title: `${placed.unit.name} 강화할까요?`,
+      subtitle: `강화 ${level} → ${level + 1} · 비용 ${cost}마나`,
+      confirmLabel: '강화',
+      confirmColor: '#ffd98a',
+      onConfirm: () => this.performEnhance(index),
+    });
+  }
+
+  // 강화 확인, 나가기 확인 등 여러 곳에서 쓰는 공용 "확인/취소" 팝업.
+  private showConfirmModal(options: {
+    title: string;
+    subtitle: string;
+    confirmLabel: string;
+    confirmColor: string;
+    onConfirm: () => void;
+  }): void {
+    this.confirmModalContainer?.destroy(true);
 
     const { width, height } = this.scale;
     const container = this.add.container(0, 0).setDepth(900);
-    this.enhanceConfirmContainer = container;
+    this.confirmModalContainer = container;
 
     const backdrop = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.55);
     container.add(backdrop);
@@ -1016,7 +1067,7 @@ export class GameScene extends Phaser.Scene {
     container.add(cardBg);
 
     const title = this.add
-      .text(width / 2, cardY - cardHeight * 0.28, `${placed.unit.name} 강화할까요?`, {
+      .text(width / 2, cardY - cardHeight * 0.28, options.title, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(15)}px`,
         color: '#f6e6b4',
@@ -1026,7 +1077,7 @@ export class GameScene extends Phaser.Scene {
     container.add(title);
 
     const subtitle = this.add
-      .text(width / 2, cardY - cardHeight * 0.02, `강화 ${level} → ${level + 1} · 비용 ${cost}마나`, {
+      .text(width / 2, cardY - cardHeight * 0.02, options.subtitle, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(12)}px`,
         color: '#9a917d',
@@ -1069,10 +1120,10 @@ export class GameScene extends Phaser.Scene {
     container.add(confirmBg);
 
     const confirmText = this.add
-      .text(confirmX, buttonY, '강화', {
+      .text(confirmX, buttonY, options.confirmLabel, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(13)}px`,
-        color: '#ffd98a',
+        color: options.confirmColor,
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
@@ -1084,14 +1135,14 @@ export class GameScene extends Phaser.Scene {
     container.add(confirmZone);
 
     const close = () => {
-      if (this.enhanceConfirmContainer === container) this.enhanceConfirmContainer = undefined;
+      if (this.confirmModalContainer === container) this.confirmModalContainer = undefined;
       container.destroy(true);
     };
 
     cancelZone.on('pointerdown', close);
     confirmZone.on('pointerdown', () => {
       close();
-      this.performEnhance(index);
+      options.onConfirm();
     });
   }
 

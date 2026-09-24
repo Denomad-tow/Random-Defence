@@ -90,7 +90,7 @@ export class CodexScene extends Phaser.Scene {
       this.add
         .text(x, y, rarity.label, {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(11)}px`,
+          fontSize: `${px(11 * 1.2)}px`,
           color: active ? '#ffd98a' : '#8a8272',
           fontStyle: active ? 'bold' : 'normal',
         })
@@ -133,10 +133,12 @@ export class CodexScene extends Phaser.Scene {
     createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, Math.round(iconSize));
     this.add.image(iconX, y, key).setDisplaySize(iconSize, iconSize);
 
-    const nameFontSize = Math.max(10, Math.round(cardW * 0.085));
-    const smallFontSize = Math.max(8, Math.round(cardW * 0.065));
+    // 중앙 이름·분류·특성 글씨 크기는 컬렉션 화면의 특성 설명 글씨 크기와 동일하게 맞춘다.
+    const collectionButtonWidth = cardW * 0.34 * 0.88;
+    const centerFontSize = Math.max(8, Math.round(collectionButtonWidth * 0.1));
     const textCx = cardX + iconAreaWidth + textAreaWidth / 2;
     const textWrapWidth = textAreaWidth - cardW * 0.03;
+    const centerLineGap = cardH * 0.015;
 
     const category = ROLE_CATEGORIES[unit.role] ?? '';
     const categoryColor = CATEGORY_COLORS[category] ?? '#9a917d';
@@ -145,7 +147,7 @@ export class CodexScene extends Phaser.Scene {
     const nameText = this.add
       .text(textCx, nameTop, `${sigil?.label ?? unit.role}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(nameFontSize)}px`,
+        fontSize: `${px(centerFontSize)}px`,
         color: '#f0e9d8',
         fontStyle: 'bold',
         align: 'center',
@@ -153,47 +155,57 @@ export class CodexScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
-    const categoryTop = nameTop + nameText.height + cardH * 0.04;
+    const categoryTop = nameTop + nameText.height + centerLineGap;
     const categoryText = this.add
       .text(textCx, categoryTop, category, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(smallFontSize)}px`,
+        fontSize: `${px(centerFontSize)}px`,
         color: categoryColor,
         fontStyle: 'bold',
       })
       .setOrigin(0.5, 0);
 
-    const descTop = categoryTop + categoryText.height + cardH * 0.03;
+    const descTop = categoryTop + categoryText.height + centerLineGap;
     this.add
       .text(textCx, descTop, ROLE_DESCRIPTIONS[unit.role] ?? '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(smallFontSize)}px`,
+        fontSize: `${px(centerFontSize)}px`,
         color: '#9fd8ff',
         align: 'center',
         wordWrap: { width: textWrapWidth },
       })
       .setOrigin(0.5, 0);
 
-    // 우측: 공격/속도/사거리를 각각 한 줄씩, 세로로 균등하게 배치.
+    // 우측: 공격/속도/사거리를 각각 한 줄씩, 작은 글씨 + 좁은 여백으로 배치.
     const statsCx = cardX + cardW - statsAreaWidth / 2;
     const statLines = [
       { label: '공격', value: `${unit.attack}` },
       { label: '속도', value: `${unit.attackSpeed}` },
       { label: '사거리', value: `${unit.range}` },
     ];
-    const statFontSize = Math.max(8, Math.round(cardW * 0.07));
-    const statGap = cardH * 0.24;
-    const statsStartY = y - statGap;
+    const statFontSize = Math.max(7, Math.round(cardW * 0.035));
+    const statGap = cardH * 0.03;
 
-    statLines.forEach((stat, i) => {
+    const probe = this.add.text(0, 0, '측정용', {
+      fontFamily: TITLE_FONT,
+      fontSize: `${px(statFontSize)}px`,
+    });
+    const statLineHeight = probe.height;
+    probe.destroy();
+
+    const totalStatsHeight = statLineHeight * statLines.length + statGap * (statLines.length - 1);
+    let statY = y - totalStatsHeight / 2 + statLineHeight / 2;
+
+    statLines.forEach((stat) => {
       this.add
-        .text(statsCx, statsStartY + i * statGap, `${stat.label} ${stat.value}`, {
+        .text(statsCx, statY, `${stat.label} ${stat.value}`, {
           fontFamily: TITLE_FONT,
           fontSize: `${px(statFontSize)}px`,
           color: '#ffd98a',
           align: 'center',
         })
         .setOrigin(0.5);
+      statY += statLineHeight + statGap;
     });
   }
 }

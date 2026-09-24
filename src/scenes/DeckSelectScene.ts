@@ -4,7 +4,7 @@ import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
 import { loadDeckSlot, saveDeckSlot, loadActiveSlot, saveActiveSlot, DECK_SLOT_COUNT } from '../meta/deck';
-import { ensureStarterCollection, loadCollection, saveCollection } from '../meta/collection';
+import { ensureStarterCollection } from '../meta/collection';
 import { loadGold } from '../meta/gold';
 import { loadBoxes } from '../meta/boxes';
 import { sortByRarityThenLevel } from '../meta/unitSort';
@@ -83,17 +83,6 @@ export class DeckSelectScene extends Phaser.Scene {
 
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#07080d');
-
-    const devButton = this.add
-      .text(px(10), px(10), '[개발자] 전체 획득', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(10)}px`,
-        color: '#5a5a5a',
-      })
-      .setOrigin(0, 0)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.devUnlockAll());
-    devButton.setPadding(px(8), px(8), px(8), px(8));
 
     this.add
       .text(width / 2, height * 0.05, '덱을 선택하세요', {
@@ -424,18 +413,6 @@ export class DeckSelectScene extends Phaser.Scene {
       .then(() => {
         window.location.reload();
       });
-  }
-
-  private devUnlockAll(): void {
-    let collection = loadCollection();
-    NORMAL_UNITS.forEach((unit) => {
-      if (!collection.includes(unit.id)) {
-        collection = [...collection, unit.id];
-      }
-    });
-    saveCollection(collection);
-    this.rebuildOwnedCounts(collection);
-    this.layout();
   }
 
   private toggleUnit(id: string): void {

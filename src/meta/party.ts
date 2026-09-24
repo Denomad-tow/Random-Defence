@@ -40,6 +40,10 @@ export interface KillRewardPayload {
   kind: string; // MonsterKindId — 몬스터 종류별로 마나 보상이 다르다.
 }
 
+export interface GameOverPayload {
+  stage: number; // 도달한 스테이지. 각자 이 숫자로 자기 몫의 보상을 계산한다.
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
 const CODE_LENGTH = 5;
 
@@ -53,6 +57,7 @@ let startHandler: () => void = () => {};
 let monsterSyncHandler: (payload: MonsterSyncPayload) => void = () => {};
 let damageHandler: (payload: DamageEventPayload) => void = () => {};
 let killRewardHandler: (payload: KillRewardPayload) => void = () => {};
+let gameOverHandler: (payload: GameOverPayload) => void = () => {};
 
 function randomCode(): string {
   let code = '';
@@ -85,6 +90,7 @@ function connect(
   monsterSyncHandler = () => {};
   damageHandler = () => {};
   killRewardHandler = () => {};
+  gameOverHandler = () => {};
 
   channel = supabase.channel(`party-room-${code}`, {
     config: { presence: { key: nickname } },
@@ -109,6 +115,10 @@ function connect(
 
   channel.on('broadcast', { event: 'kill-reward' }, (msg) => {
     killRewardHandler(msg.payload as KillRewardPayload);
+  });
+
+  channel.on('broadcast', { event: 'game-over' }, (msg) => {
+    gameOverHandler(msg.payload as GameOverPayload);
   });
 
   return new Promise((resolve, reject) => {
@@ -155,6 +165,7 @@ export function leaveRoom(): void {
   monsterSyncHandler = () => {};
   damageHandler = () => {};
   killRewardHandler = () => {};
+  gameOverHandler = () => {};
 }
 
 export function broadcastStart(): void {
@@ -187,6 +198,14 @@ export function setKillRewardHandler(handler: (payload: KillRewardPayload) => vo
 
 export function broadcastKillReward(payload: KillRewardPayload): void {
   channel?.send({ type: 'broadcast', event: 'kill-reward', payload });
+}
+
+export function setGameOverHandler(handler: (payload: GameOverPayload) => void): void {
+  gameOverHandler = handler;
+}
+
+export function broadcastGameOver(payload: GameOverPayload): void {
+  channel?.send({ type: 'broadcast', event: 'game-over', payload });
 }
 
 export function isRoomHost(): boolean {

@@ -21,6 +21,10 @@ import {
 } from '../core/economy';
 import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
 import { getCurrentNickname } from '../meta/auth';
+import { computeRunReward, type RunReward } from '../meta/rewards';
+import { addGold } from '../meta/gold';
+import { addBox } from '../meta/boxes';
+import { getBoxType } from '../meta/gacha';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -41,6 +45,8 @@ import {
   broadcastDamage,
   setKillRewardHandler,
   broadcastKillReward,
+  setGameOverHandler,
+  broadcastGameOver,
   getLatestMembers,
   type PartyMember,
   type MonsterSyncPayload,
@@ -51,6 +57,7 @@ const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
 const FIRST_SPAWN_DELAY_MS = 2000;
 const SYNC_INTERVAL_MS = 150;
+const MAX_MONSTERS_ON_FIELD = 100;
 
 interface HostMonster {
   id: number;
@@ -77,12 +84,16 @@ interface CoopPlacedUnit {
   sprite: Phaser.GameObjects.Image;
 }
 
-// 5단계(협동 파티전) 실시간 동기화 2번째 조각: 각자 자기 필드에 유닛을 소환하고,
-// 그 공격이 실제로 "다같이 공유하는" 몬스터 체력을 깎는다. 아직 합성·강화·직업별
-// 특수 효과(독/기절/광역 등)는 연결 안 됨 — 기본 단일 공격 피해만 적용된다.
+// 5단계(협동 파티전) 실시간 동기화 3번째 조각: 몬스터가 너무 많이 쌓이면(필드가
+// 뚫리면) 파티 전체가 함께 전투를 종료하고 보상을 나눠 받는다. 몬스터 길과 체력이
+// 파티 전체가 공유하는 하나뿐이라 "나만 뚫리는" 상황이 없기 때문에, 개인별로
+// 나누지 않고 다 같이 끝내는 것으로 정했다 (CLAUDE.md 11장 참고).
+// 아직 합성·강화·직업별 특수 효과(독/기절/광역 등)는 연결 안 됨 — 기본 단일
+// 공격 피해만 적용된다.
 export class CoopGameScene extends Phaser.Scene {
   private isHost = false;
   private boardReady = false;
+  private gameOver = false;
   private monsterPath!: Phaser.Curves.Path;
   private boardCells: CellPosition[] = [];
   private cellSize = 0;
@@ -122,6 +133,7 @@ export class CoopGameScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor('#07080d');
     this.boardReady = false;
+    this.gameOver = false;
     this.waveState = createInitialWaveState();
     this.hostMonsters = [];
     this.nextMonsterId = 1;
@@ -152,6 +164,7 @@ export class CoopGameScene extends Phaser.Scene {
     } else {
       setMonsterSyncHandler((payload) => this.handleSnapshot(payload));
       setKillRewardHandler((payload) => this.grantMana(payload.kind as MonsterKindId));
+      setGameOverHandler((payload) => this.endRun(payload.stage));
       this.layoutWaiting();
     }
   }
@@ -170,7 +183,7 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (!this.boardReady) return;
+    if (!this.boardReady || this.gameOver) return;
 
     const dt = delta / 1000;
 
@@ -195,11 +208,10 @@ export class CoopGameScene extends Phaser.Scene {
       m.sprite.setPosition(point.x, point.y);
     });
 
-    // 이번 단계에서는 아직 패배 처리가 없어서, 끝에 도달한 몬스터는 그냥 사라진다.
-    const reached = this.hostMonsters.filter((m) => m.t >= 1);
-    if (reached.length > 0) {
-      reached.forEach((m) => m.sprite.destroy());
-      this.hostMonsters = this.hostMonsters.filter((m) => m.t < 1);
+    // 끝까지 도달한 몬스터는 사라지지 않고 필드 끝에 계속 쌓인다(솔로 모드와 동일).
+    // 처치하지 않고 방치하면 결국 자리가 꽉 차서 필드가 뚫린다.
+    if (this.hostMonsters.length >= MAX_MONSTERS_ON_FIELD) {
+      this.triggerHostGameOver();
     }
   }
 
@@ -229,6 +241,135 @@ export class CoopGameScene extends Phaser.Scene {
     this.spawnTimer?.remove();
     this.syncTimer?.remove();
     leaveRoom();
+  }
+
+  // ----- 필드 뚫림 / 전투 종료 -----
+  // 몬스터 길과 체력이 파티 전체가 공유하는 하나뿐이라, 필드가 뚫리는 것도
+  // 파티 전체에 동시에 일어나는 일이다. 그래서 개인별로 나누지 않고, 방장이
+  // 종료를 판단해 모두에게 알리고 다 같이 같은 스테이지 기준 보상을 받는다.
+
+  private triggerHostGameOver(): void {
+    if (this.gameOver) return;
+    const stage = this.waveState.stage;
+    broadcastGameOver({ stage });
+    this.endRun(stage);
+  }
+
+  private endRun(stage: number): void {
+    if (this.gameOver) return;
+    this.gameOver = true;
+    this.firstSpawnTimer?.remove();
+    this.spawnTimer?.remove();
+    this.syncTimer?.remove();
+
+    const reward = computeRunReward(stage);
+    addGold(reward.gold);
+    addBox(reward.boxId);
+
+    this.showGameOverOverlay(stage, reward);
+  }
+
+  private showGameOverOverlay(stage: number, reward: RunReward): void {
+    const { width, height } = this.scale;
+
+    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(1000);
+
+    this.add
+      .text(width / 2, height * 0.34, '협동 전투 종료', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(28)}px`,
+        color: '#ffd98a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001);
+
+    this.add
+      .text(width / 2, height * 0.42, `도달 스테이지 ${stage}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(14)}px`,
+        color: '#f6e6b4',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001);
+
+    const boxName = getBoxType(reward.boxId).name;
+    this.add
+      .text(width / 2, height * 0.48, `보상: 골드 +${reward.gold} · ${boxName} +1`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#ffd98a',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001);
+
+    const refCell = this.cellSize || Math.min(width, height) * 0.15;
+    const buttonWidth = Math.min(refCell * 3.4, width * 0.6);
+    const buttonHeight = refCell * 0.9;
+
+    this.drawOverlayButton(width / 2, height * 0.6, buttonWidth, buttonHeight, '덱 선택으로', () =>
+      this.scene.start('deck-select', { forceEdit: true }),
+    );
+  }
+
+  private drawOverlayButton(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    label: string,
+    onClick: () => void,
+  ): void {
+    const bg = this.add.graphics().setDepth(1001);
+    bg.fillStyle(0x151a28, 1);
+    bg.fillRoundedRect(x - width / 2, y - height / 2, width, height, px(10));
+    bg.lineStyle(px(2), 0xd4b36a, 1);
+    bg.strokeRoundedRect(x - width / 2, y - height / 2, width, height, px(10));
+
+    this.add
+      .text(x, y, label, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(16)}px`,
+        color: '#f6e6b4',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(1001);
+
+    this.add
+      .zone(x, y, width, height)
+      .setInteractive({ useHandCursor: true })
+      .setDepth(1001)
+      .on('pointerdown', onClick);
+  }
+
+  private announceBoss(): void {
+    const { width, height } = this.scale;
+
+    this.cameras.main.shake(400, 0.006);
+
+    const flash = this.add.rectangle(width / 2, height / 2, width, height, 0xff3b3b, 0.35).setDepth(900);
+    this.tweens.add({ targets: flash, alpha: 0, duration: 500, onComplete: () => flash.destroy() });
+
+    const banner = this.add
+      .text(width / 2, height * 0.22, '보스 출현!', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(26)}px`,
+        color: '#ffcf5a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(901)
+      .setAlpha(0);
+
+    this.tweens.add({
+      targets: banner,
+      alpha: 1,
+      duration: 200,
+      yoyo: true,
+      hold: 800,
+      onComplete: () => banner.destroy(),
+    });
   }
 
   // ----- 전투: 내가 배치한 유닛이 공유 몬스터를 공격 -----
@@ -377,6 +518,10 @@ export class CoopGameScene extends Phaser.Scene {
     });
 
     this.refreshHud();
+
+    if (result.kind === 'boss') {
+      this.announceBoss();
+    }
   }
 
   private broadcastSnapshot(): void {
@@ -429,6 +574,7 @@ export class CoopGameScene extends Phaser.Scene {
           snapshotAt: now,
           intervalMs: SYNC_INTERVAL_MS,
         });
+        if (m.kind === 'boss') this.announceBoss();
         return;
       }
 

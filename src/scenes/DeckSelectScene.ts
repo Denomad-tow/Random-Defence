@@ -140,26 +140,20 @@ export class DeckSelectScene extends Phaser.Scene {
     this.drawSlotTabs(width, height * 0.13);
 
     const owned = this.ownedUnits();
-    const cols = 6;
+    const cols = 8;
+    const rowsPerPage = 2;
 
-    // Fixed, cardSize-independent geometry for the bottom UI so the card
-    // grid can never grow into it, regardless of screen aspect ratio.
-    const buttonWidth = Math.min(width * 0.65, height * 0.5);
-    const buttonHeight = height * 0.075;
-    const buttonY = height * 0.94;
-    const countY = buttonY - buttonHeight / 2 - height * 0.035;
-
-    const gridTop = height * 0.18;
-    const gridBottom = countY - height * 0.04;
-    const availableGridHeight = Math.max(gridBottom - gridTop, height * 0.1);
-
-    // Smaller, denser cards than before so most/all owned units fit on one
-    // screen; when the collection still overflows, we paginate on top of this.
+    // Grid is fixed at exactly 2 rows (per user request); more columns keeps
+    // cards small/narrow, and pagination handles anything beyond 2 rows.
+    // Card size is width-bound, with a height-based cap only as a safety net
+    // for very short screens.
     const rowSpacingFactor = 1.45;
     const lastRowExtra = 1.1;
-    const cardSize = width / (cols + 1.4);
-    const rowPitch = cardSize * rowSpacingFactor;
-    const rowsPerPage = Math.max(1, Math.floor((availableGridHeight - cardSize * lastRowExtra) / rowPitch) + 1);
+    const gridTop = height * 0.18;
+    const rowsFactor = rowSpacingFactor * (rowsPerPage - 1) + lastRowExtra;
+    const cardSizeByWidth = width / (cols + 1.4);
+    const cardSizeByHeight = (height * 0.6) / rowsFactor;
+    const cardSize = Math.min(cardSizeByWidth, cardSizeByHeight);
     const itemsPerPage = rowsPerPage * cols;
 
     const totalPages = Math.max(1, Math.ceil(owned.length / itemsPerPage));
@@ -179,9 +173,23 @@ export class DeckSelectScene extends Phaser.Scene {
       this.drawCard(unit, x, y, cardSize);
     });
 
+    // Bottom UI sits right below the (now compact) grid instead of being
+    // pinned to the bottom of the screen, so shrinking the grid doesn't
+    // leave a big empty gap.
+    const gridContentBottom = gridTop + cardSize * rowsFactor;
+    let cursorY = gridContentBottom + height * 0.035;
+
     if (totalPages > 1) {
-      this.drawPagination(width, gridBottom + height * 0.02, totalPages);
+      this.drawPagination(width, cursorY, totalPages);
+      cursorY += height * 0.06;
     }
+
+    const countY = cursorY;
+    cursorY += height * 0.07;
+
+    const buttonWidth = Math.min(width * 0.65, height * 0.5);
+    const buttonHeight = height * 0.075;
+    const buttonY = cursorY;
 
     this.countText = this.add
       .text(width / 2, countY, '', {

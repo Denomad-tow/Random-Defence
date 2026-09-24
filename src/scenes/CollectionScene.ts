@@ -11,6 +11,7 @@ import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const ROWS_PER_PAGE = 6;
+const COLS = 2;
 
 export class CollectionScene extends Phaser.Scene {
   private page = 0;
@@ -75,56 +76,67 @@ export class CollectionScene extends Phaser.Scene {
       .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
 
     const owned = this.ownedUnits();
-    const totalPages = Math.max(1, Math.ceil(owned.length / ROWS_PER_PAGE));
+    const itemsPerPage = COLS * ROWS_PER_PAGE;
+    const totalPages = Math.max(1, Math.ceil(owned.length / itemsPerPage));
     this.page = Phaser.Math.Clamp(this.page, 0, totalPages - 1);
-    const pageItems = owned.slice(this.page * ROWS_PER_PAGE, (this.page + 1) * ROWS_PER_PAGE);
+    const pageItems = owned.slice(this.page * itemsPerPage, (this.page + 1) * itemsPerPage);
 
     const listTop = height * 0.14;
-    const rowHeight = height * 0.72 / ROWS_PER_PAGE;
+    const rowHeight = (height * 0.72) / ROWS_PER_PAGE;
+    const colWidth = width / COLS;
 
     pageItems.forEach((unit, i) => {
-      this.drawRow(unit, listTop + i * rowHeight + rowHeight / 2, rowHeight);
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      this.drawCard(unit, col * colWidth, colWidth, listTop + row * rowHeight + rowHeight / 2, rowHeight);
     });
 
     this.drawPagination(width, height, totalPages);
   }
 
-  private drawRow(unit: UnitDef, y: number, rowHeight: number): void {
-    const { width } = this.scale;
+  private drawCard(unit: UnitDef, x0: number, colWidth: number, y: number, rowHeight: number): void {
+    const pad = colWidth * 0.04;
+    const cardX = x0 + pad;
+    const cardW = colWidth - pad * 2;
 
-    const rowBg = this.add.graphics();
-    rowBg.fillStyle(0x151a28, 0.85);
-    rowBg.fillRoundedRect(width * 0.04, y - rowHeight * 0.42, width * 0.92, rowHeight * 0.84, px(8));
-    rowBg.lineStyle(px(1), 0xd4b36a, 0.4);
-    rowBg.strokeRoundedRect(width * 0.04, y - rowHeight * 0.42, width * 0.92, rowHeight * 0.84, px(8));
+    const cardBg = this.add.graphics();
+    cardBg.fillStyle(0x151a28, 0.85);
+    cardBg.fillRoundedRect(cardX, y - rowHeight * 0.44, cardW, rowHeight * 0.88, px(8));
+    cardBg.lineStyle(px(1), 0xd4b36a, 0.4);
+    cardBg.strokeRoundedRect(cardX, y - rowHeight * 0.44, cardW, rowHeight * 0.88, px(8));
 
-    const iconSize = rowHeight * 0.75;
-    const iconX = width * 0.04 + iconSize * 0.7;
+    const iconSize = rowHeight * 0.5;
+    const iconX = cardX + iconSize * 0.6;
+    const iconY = y - rowHeight * 0.16;
     const sigil = ROLE_SIGILS[unit.role];
     const key = `collicon-${unit.id}-${Math.round(iconSize)}`;
     createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, Math.round(iconSize));
-    this.add.image(iconX, y, key).setDisplaySize(iconSize * 0.9, iconSize * 0.9);
+    this.add.image(iconX, iconY, key).setDisplaySize(iconSize * 0.9, iconSize * 0.9);
 
     const count = this.ownedCounts.get(unit.id) ?? 0;
     const level = getUnitLevel(unit.id);
+    const textX = cardX + iconSize * 1.25;
+    const textWrapWidth = cardX + cardW - textX - pad * 0.5;
 
     this.add
-      .text(width * 0.22, y - rowHeight * 0.18, unit.name, {
+      .text(textX, y - rowHeight * 0.26, unit.name, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
+        fontSize: `${px(11)}px`,
         color: '#f0e9d8',
+        wordWrap: { width: textWrapWidth },
       })
       .setOrigin(0, 0.5);
 
     this.add
-      .text(width * 0.22, y + rowHeight * 0.2, `Lv.${level} · 보유 ${count}`, {
+      .text(textX, y - rowHeight * 0.04, `Lv.${level} · 보유 ${count}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(10)}px`,
+        fontSize: `${px(9)}px`,
         color: '#9a917d',
+        wordWrap: { width: textWrapWidth },
       })
       .setOrigin(0, 0.5);
 
-    this.drawLevelUpButton(unit, count, level, width * 0.72, y, width * 0.24, rowHeight * 0.6);
+    this.drawLevelUpButton(unit, count, level, cardX + cardW / 2, y + rowHeight * 0.27, cardW * 0.92, rowHeight * 0.3);
   }
 
   private drawLevelUpButton(

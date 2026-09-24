@@ -1218,7 +1218,11 @@ export class GameScene extends Phaser.Scene {
     this.placedUnits.delete(sourceIndex);
     this.placedUnits.delete(targetIndex);
 
-    const resultUnit = pickRandomUnit(this.deckPool());
+    // 합성 결과는 합쳐진 두 유닛과 같은 등급의 덱 유닛 중에서만 무작위로
+    // 나오게 한다 (등급이 갑자기 뛰거나 떨어지면 밸런스가 안 맞으므로).
+    const rarity = sourcePlaced.unit.rarity;
+    const sameRarityPool = this.deckPool().filter((u) => u.rarity === rarity);
+    const resultUnit = pickRandomUnit(sameRarityPool.length > 0 ? sameRarityPool : this.deckPool());
     const result: PlacedUnit = {
       unit: resultUnit,
       star: Math.min(MAX_STAR, sourcePlaced.star + 1),

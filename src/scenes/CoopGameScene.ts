@@ -38,6 +38,13 @@ interface HostMonster {
   sprite: Phaser.GameObjects.Image;
 }
 
+interface GuestMonster {
+  sprite: Phaser.GameObjects.Image;
+  fromT: number;
+  toT: number;
+  snapshotAt: number;
+}
+
 // 5단계(협동 파티전) 실시간 동기화의 1번째 조각: 몬스터의 위치·체력을 방장
 // 기기가 계산해서 실시간으로 나머지 파티원에게 전달하고, 파티원은 받은 대로
 // 그대로 그린다. 아직 유닛 배치·공격은 연결되지 않은 "보기 전용" 단계다.
@@ -57,7 +64,7 @@ export class CoopGameScene extends Phaser.Scene {
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
   private syncTimer?: Phaser.Time.TimerEvent;
 
-  private guestSprites = new Map<number, Phaser.GameObjects.Image>();
+  private guestMonsters = new Map<number, GuestMonster>();
 
   private members: PartyMember[] = [];
   private hudText?: Phaser.GameObjects.Text;
@@ -77,7 +84,7 @@ export class CoopGameScene extends Phaser.Scene {
     this.waveState = createInitialWaveState();
     this.hostMonsters = [];
     this.nextMonsterId = 1;
-    this.guestSprites = new Map();
+    this.guestMonsters = new Map();
     this.members = getLatestMembers();
 
     this.events.once('shutdown', this.handleShutdown, this);
@@ -98,8 +105,16 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (!this.isHost || !this.boardReady) return;
+    if (!this.boardReady) return;
 
+    if (this.isHost) {
+      this.updateHostMonsters(delta);
+    } else {
+      this.updateGuestInterpolation();
+    }
+  }
+
+  private updateHostMonsters(delta: number): void {
     const dt = delta / 1000;
     const pathLength = this.monsterPath.getLength();
 
@@ -117,6 +132,22 @@ export class CoopGameScene extends Phaser.Scene {
       reached.forEach((m) => m.sprite.destroy());
       this.hostMonsters = this.hostMonsters.filter((m) => m.t < 1);
     }
+  }
+
+  // 파티원 쪽은 초당 몇 번(SYNC_INTERVAL_MS 간격)만 위치를 받기 때문에, 그 사이는
+  // 이전 위치→새 위치를 부드럽게 이어서 그린다 (안 그러면 뚝뚝 끊겨 보인다).
+  private updateGuestInterpolation(): void {
+    const now = this.time.now;
+    this.guestMonsters.forEach((entry) => {
+      const t = this.interpolatedT(entry, now);
+      const point = this.monsterPath.getPoint(t);
+      entry.sprite.setPosition(point.x, point.y);
+    });
+  }
+
+  private interpolatedT(entry: GuestMonster, now: number): number {
+    const progress = Phaser.Math.Clamp((now - entry.snapshotAt) / SYNC_INTERVAL_MS, 0, 1);
+    return Phaser.Math.Linear(entry.fromT, entry.toT, progress);
   }
 
   private handleShutdown(): void {
@@ -203,23 +234,31 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private reconcileMonsters(snapshot: MonsterSyncPayload['monsters']): void {
+    const now = this.time.now;
     const seen = new Set<number>();
 
     snapshot.forEach((m) => {
       seen.add(m.id);
-      let sprite = this.guestSprites.get(m.id);
-      if (!sprite) {
-        sprite = this.createMonsterSprite(m.kind as MonsterKindId, m.species);
-        this.guestSprites.set(m.id, sprite);
+      const existing = this.guestMonsters.get(m.id);
+
+      if (!existing) {
+        const sprite = this.createMonsterSprite(m.kind as MonsterKindId, m.species);
+        const point = this.monsterPath.getPoint(m.t);
+        sprite.setPosition(point.x, point.y);
+        this.guestMonsters.set(m.id, { sprite, fromT: m.t, toT: m.t, snapshotAt: now });
+        return;
       }
-      const point = this.monsterPath.getPoint(m.t);
-      sprite.setPosition(point.x, point.y);
+
+      // 지금 보간 중이던 위치를 새 시작점으로 삼아야 순간이동 없이 자연스럽게 이어진다.
+      existing.fromT = this.interpolatedT(existing, now);
+      existing.toT = m.t;
+      existing.snapshotAt = now;
     });
 
-    for (const [id, sprite] of this.guestSprites) {
+    for (const [id, entry] of this.guestMonsters) {
       if (!seen.has(id)) {
-        sprite.destroy();
-        this.guestSprites.delete(id);
+        entry.sprite.destroy();
+        this.guestMonsters.delete(id);
       }
     }
   }
@@ -244,7 +283,7 @@ export class CoopGameScene extends Phaser.Scene {
 
   private layout(): void {
     this.children.removeAll(true);
-    this.guestSprites = new Map();
+    this.guestMonsters = new Map();
 
     const { width, height } = this.scale;
     this.drawBackground(width, height);
@@ -311,7 +350,7 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private refreshHud(): void {
-    const count = this.isHost ? this.hostMonsters.length : this.guestSprites.size;
+    const count = this.isHost ? this.hostMonsters.length : this.guestMonsters.size;
     this.hudText?.setText(`협동 전투 (베타) · 스테이지 ${this.waveState.stage} · 몬스터 ${count}마리`);
   }
 

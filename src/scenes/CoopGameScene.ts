@@ -122,6 +122,7 @@ export class CoopGameScene extends Phaser.Scene {
   private summonButtonBg?: Phaser.GameObjects.Graphics;
   private summonButtonText?: Phaser.GameObjects.Text;
   private summonButtonGeom = { x: 0, y: 0, w: 0, h: 0 };
+  private confirmModalContainer?: Phaser.GameObjects.Container;
 
   constructor() {
     super('coop-game');
@@ -635,6 +636,7 @@ export class CoopGameScene extends Phaser.Scene {
 
   private layoutWaiting(): void {
     this.children.removeAll(true);
+    this.confirmModalContainer = undefined;
     const { width, height } = this.scale;
     this.drawBackground(width, height);
 
@@ -651,6 +653,7 @@ export class CoopGameScene extends Phaser.Scene {
 
   private layout(): void {
     this.children.removeAll(true);
+    this.confirmModalContainer = undefined;
     this.guestMonsters = new Map();
 
     const { width, height } = this.scale;
@@ -679,6 +682,128 @@ export class CoopGameScene extends Phaser.Scene {
     this.drawSummonButton(width / 2, buttonY, Math.min(boardLayout.cellSize * 3.4, width * 0.6), buttonHeight);
   }
 
+  private confirmExit(): void {
+    this.showConfirmModal({
+      title: '협동 전투에서 나가시겠습니까?',
+      subtitle: '지금 나가면 방에서 나가게 되고, 파티원은 계속 진행할 수 있어요',
+      confirmLabel: '나가기',
+      confirmColor: '#ff9a9a',
+      onConfirm: () => this.scene.start('deck-select', { forceEdit: true }),
+    });
+  }
+
+  // 강화 확인 등 솔로 모드와 동일한 공용 "확인/취소" 팝업.
+  private showConfirmModal(options: {
+    title: string;
+    subtitle: string;
+    confirmLabel: string;
+    confirmColor: string;
+    onConfirm: () => void;
+  }): void {
+    this.confirmModalContainer?.destroy(true);
+
+    const { width, height } = this.scale;
+    const container = this.add.container(0, 0).setDepth(900);
+    this.confirmModalContainer = container;
+
+    const backdrop = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.55);
+    container.add(backdrop);
+
+    const cardWidth = Math.min(width * 0.78, px(320));
+    const cardHeight = height * 0.22;
+    const cardY = height * 0.5;
+
+    const cardBg = this.add.graphics();
+    cardBg.fillStyle(0x151a28, 0.97);
+    cardBg.fillRoundedRect(width / 2 - cardWidth / 2, cardY - cardHeight / 2, cardWidth, cardHeight, px(14));
+    cardBg.lineStyle(px(2), 0xd4b36a, 0.9);
+    cardBg.strokeRoundedRect(width / 2 - cardWidth / 2, cardY - cardHeight / 2, cardWidth, cardHeight, px(14));
+    container.add(cardBg);
+
+    const title = this.add
+      .text(width / 2, cardY - cardHeight * 0.28, options.title, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(15)}px`,
+        color: '#f6e6b4',
+        fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: cardWidth * 0.9 },
+      })
+      .setOrigin(0.5);
+    container.add(title);
+
+    const subtitle = this.add
+      .text(width / 2, cardY - cardHeight * 0.02, options.subtitle, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#9a917d',
+        align: 'center',
+        wordWrap: { width: cardWidth * 0.9 },
+      })
+      .setOrigin(0.5);
+    container.add(subtitle);
+
+    const buttonY = cardY + cardHeight * 0.28;
+    const buttonWidth = cardWidth * 0.42;
+    const buttonHeight = cardHeight * 0.32;
+    const gap = cardWidth * 0.06;
+    const cancelX = width / 2 - buttonWidth / 2 - gap / 2;
+    const confirmX = width / 2 + buttonWidth / 2 + gap / 2;
+
+    const cancelBg = this.add.graphics();
+    cancelBg.fillStyle(0x1f2536, 1);
+    cancelBg.fillRoundedRect(cancelX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    cancelBg.lineStyle(px(1.5), 0x555555, 0.9);
+    cancelBg.strokeRoundedRect(cancelX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    container.add(cancelBg);
+
+    const cancelText = this.add
+      .text(cancelX, buttonY, '취소', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#9a917d',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    container.add(cancelText);
+
+    const cancelZone = this.add.zone(cancelX, buttonY, buttonWidth, buttonHeight).setInteractive({ useHandCursor: true });
+    container.add(cancelZone);
+
+    const confirmBg = this.add.graphics();
+    confirmBg.fillStyle(0x2a2416, 1);
+    confirmBg.fillRoundedRect(confirmX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    confirmBg.lineStyle(px(1.5), 0xd4b36a, 1);
+    confirmBg.strokeRoundedRect(confirmX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    container.add(confirmBg);
+
+    const confirmText = this.add
+      .text(confirmX, buttonY, options.confirmLabel, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: options.confirmColor,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    container.add(confirmText);
+
+    const confirmZone = this.add
+      .zone(confirmX, buttonY, buttonWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true });
+    container.add(confirmZone);
+
+    const close = () => {
+      if (this.confirmModalContainer === container) this.confirmModalContainer = undefined;
+      container.destroy(true);
+    };
+
+    cancelZone.on('pointerdown', close);
+    confirmZone.on('pointerdown', () => {
+      close();
+      options.onConfirm();
+    });
+  }
+
   private drawHeader(width: number, height: number): void {
     const headerHeight = height * 0.08;
 
@@ -690,7 +815,7 @@ export class CoopGameScene extends Phaser.Scene {
       })
       .setOrigin(0, 0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
+      .on('pointerdown', () => this.confirmExit());
     exitButton.setPadding(px(6), px(6), px(6), px(6));
 
     this.add

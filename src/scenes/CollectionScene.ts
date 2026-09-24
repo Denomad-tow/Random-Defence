@@ -119,8 +119,8 @@ export class CollectionScene extends Phaser.Scene {
     const buttonHeight = cardH * 0.6;
 
     // Name font matches the level-up button's label size, per user request.
-    const labelFontSize = Math.max(7, Math.round(buttonWidth * 0.13));
-    const costFontSize = Math.max(5.5, Math.round(buttonWidth * 0.09));
+    const labelFontSize = Math.max(9, Math.round(buttonWidth * 0.13));
+    const costFontSize = Math.max(8, Math.round(buttonWidth * 0.1));
     const nameFontSize = labelFontSize;
 
     const iconSize = Math.min(iconAreaWidth * 0.85, cardH * 0.78);
@@ -147,11 +147,13 @@ export class CollectionScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
 
+    // Trait/level text matches the level-up button's cost-line size, per
+    // user request, so they read consistently at any screen width.
     const traitTop = nameTop + nameText.height + cardH * 0.04;
     const traitText = this.add
       .text(textCx, traitTop, ROLE_DESCRIPTIONS[unit.role] ?? '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(7.5)}px`,
+        fontSize: `${px(costFontSize)}px`,
         color: '#9fd8ff',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -162,7 +164,7 @@ export class CollectionScene extends Phaser.Scene {
     this.add
       .text(textCx, subTop, `Lv.${level} · ${count}개`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(7)}px`,
+        fontSize: `${px(costFontSize)}px`,
         color: '#9a917d',
         align: 'center',
         wordWrap: { width: textWrapWidth },

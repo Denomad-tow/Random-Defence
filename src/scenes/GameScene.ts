@@ -251,6 +251,7 @@ export class GameScene extends Phaser.Scene {
 
   private updateCombat(dt: number): void {
     const buffBonuses = this.computeBuffBonuses();
+    this.applyFrostAuras();
 
     this.placedUnits.forEach((placed, index) => {
       placed.cooldown -= dt;
@@ -264,21 +265,56 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      if (placed.unit.role === 'buff' || placed.unit.attack <= 0 || placed.unit.attackSpeed <= 0) {
+      if (
+        placed.unit.role === 'buff' ||
+        placed.unit.role === 'frostAura' ||
+        placed.unit.attack <= 0 ||
+        placed.unit.attackSpeed <= 0
+      ) {
         placed.cooldown = 1;
         return;
       }
 
       const rangePx = placed.unit.range * this.boardStep;
+      const bonus = buffBonuses.get(index) ?? 0;
+      const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
+      const attack = Math.round(placed.unit.attack * statMultiplier(enhanceLevel));
+
+      if (placed.unit.role === 'multishot') {
+        const targets = this.findNearestMonsters(cell.x, cell.y, rangePx, 2);
+        if (targets.length === 0) return;
+        placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
+        targets.forEach((target) => this.performAttack(cell, target, placed.unit, attack));
+        return;
+      }
+
       const target = this.findNearestMonster(cell.x, cell.y, rangePx);
       if (!target) return;
 
-      const bonus = buffBonuses.get(index) ?? 0;
       placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
-
-      const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
-      const attack = Math.round(placed.unit.attack * statMultiplier(enhanceLevel));
       this.performAttack(cell, target, placed.unit, attack);
+    });
+  }
+
+  private applyFrostAuras(): void {
+    this.placedUnits.forEach((placed, index) => {
+      if (placed.unit.role !== 'frostAura') return;
+
+      const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
+      if (!cell) return;
+
+      const effect = placed.unit.effects.find((e) => e.type === 'frostAura');
+      const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
+      const value = ((effect?.value as number) ?? 0.2) * statMultiplier(enhanceLevel);
+      const rangePx = placed.unit.range * this.boardStep;
+
+      this.monsters.forEach((monster) => {
+        if (!monster.active) return;
+        if (Phaser.Math.Distance.Between(cell.x, cell.y, monster.x, monster.y) <= rangePx) {
+          const status = (monster.getData('status') as StatusEffects) ?? {};
+          monster.setData('status', applySlow(status, value, 0.4));
+        }
+      });
     });
   }
 
@@ -338,6 +374,16 @@ export class GameScene extends Phaser.Scene {
     return nearest;
   }
 
+  private findNearestMonsters(x: number, y: number, rangePx: number, count: number): Phaser.GameObjects.Image[] {
+    return this.monsters
+      .filter((m) => m.active && Phaser.Math.Distance.Between(x, y, m.x, m.y) <= rangePx)
+      .sort(
+        (a, b) =>
+          Phaser.Math.Distance.Between(x, y, a.x, a.y) - Phaser.Math.Distance.Between(x, y, b.x, b.y),
+      )
+      .slice(0, count);
+  }
+
   private performAttack(
     cell: CellPosition,
     target: Phaser.GameObjects.Image,
@@ -364,7 +410,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private applyUnitHit(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number): void {
-    this.dealDamage(target, attack, '#fff5d6');
+    const damage = this.computeHitDamage(target, unitDef, attack);
+    this.dealDamage(target, damage, '#fff5d6');
+    this.applyManaLeech(unitDef);
     if (!target.active) return;
 
     this.applyRoleEffect(target, unitDef);
@@ -380,6 +428,99 @@ export class GameScene extends Phaser.Scene {
         }
       });
     }
+
+    if (unitDef.role === 'pierce') {
+      this.monsters.forEach((other) => {
+        if (other === target || !other.active) return;
+        if (Math.abs(other.x - target.x) <= this.cellSize * 0.5) {
+          this.dealDamage(other, attack, '#fff5d6');
+        }
+      });
+    }
+
+    if (unitDef.role === 'chain') {
+      this.chainBounce(target.x, target.y, attack, new Set([target]), 2);
+    }
+  }
+
+  private computeHitDamage(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number): number {
+    let damage = attack;
+
+    if (unitDef.role === 'execute') {
+      const hp = target.getData('hp') as number;
+      const maxHp = (target.getData('maxHp') as number) ?? hp;
+      if (maxHp > 0 && hp / maxHp <= 0.25) {
+        damage = Math.round(damage * 1.8);
+      }
+    }
+
+    if (unitDef.role === 'critStrike') {
+      const effect = unitDef.effects.find((e) => e.type === 'critStrike');
+      const chance = (effect?.chance as number) ?? 0.2;
+      const multiplier = (effect?.multiplier as number) ?? 3;
+      if (Math.random() < chance) {
+        damage = Math.round(damage * multiplier);
+      }
+    }
+
+    return damage;
+  }
+
+  private applyManaLeech(unitDef: UnitDef): void {
+    if (unitDef.role !== 'manaLeech') return;
+
+    const effect = unitDef.effects.find((e) => e.type === 'manaLeech');
+    const chance = (effect?.chance as number) ?? 0.3;
+    const value = (effect?.value as number) ?? 2;
+
+    if (Math.random() < chance) {
+      this.economy = { ...this.economy, mana: this.economy.mana + value };
+      this.refreshMana();
+    }
+  }
+
+  private chainBounce(
+    fromX: number,
+    fromY: number,
+    damage: number,
+    hit: Set<Phaser.GameObjects.Image>,
+    remaining: number,
+  ): void {
+    if (remaining <= 0) return;
+
+    const rangePx = this.cellSize * 1.6;
+    let nearest: Phaser.GameObjects.Image | null = null;
+    let nearestDist = Infinity;
+
+    this.monsters.forEach((monster) => {
+      if (hit.has(monster) || !monster.active) return;
+      const dist = Phaser.Math.Distance.Between(fromX, fromY, monster.x, monster.y);
+      if (dist <= rangePx && dist < nearestDist) {
+        nearest = monster;
+        nearestDist = dist;
+      }
+    });
+
+    if (!nearest) return;
+
+    const bounceTarget = nearest as Phaser.GameObjects.Image;
+    const bounceDamage = Math.round(damage * 0.6);
+    hit.add(bounceTarget);
+
+    const bolt = this.add.circle(fromX, fromY, px(3), ROLE_ATTACK_COLORS.chain, 1);
+
+    this.tweens.add({
+      targets: bolt,
+      x: bounceTarget.x,
+      y: bounceTarget.y,
+      duration: 120,
+      onComplete: () => {
+        bolt.destroy();
+        if (!bounceTarget.active) return;
+        this.dealDamage(bounceTarget, bounceDamage, '#fff5d6');
+        this.chainBounce(bounceTarget.x, bounceTarget.y, bounceDamage, hit, remaining - 1);
+      },
+    });
   }
 
   private applyRoleEffect(target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
@@ -966,6 +1107,7 @@ export class GameScene extends Phaser.Scene {
     monster.setData('crawlSpeed', kind.crawlSpeed);
     monster.setData('scatterX', (Math.random() - 0.5) * this.cellSize * 2.6);
     monster.setData('hp', hp);
+    monster.setData('maxHp', hp);
     monster.setData('kind', kind.id);
 
     this.monsters.push(monster);

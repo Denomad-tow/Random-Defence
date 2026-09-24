@@ -33,4 +33,10 @@ export const ROLE_ATTACK_COLORS: Record<string, number> = {
   poison: 0x6fe06f,
   armorBreak: 0xb0b0b8,
   buff: 0xf3c96b,
+  pierce: 0x9fd8ff,
+  multishot: 0xffb454,
+  chain: 0x7ef0ff,
+  execute: 0xff4d6d,
+  manaLeech: 0x8ee6c0,
+  critStrike: 0xffe066,
 };

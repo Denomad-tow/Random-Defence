@@ -79,8 +79,8 @@ export class DeckSelectScene extends Phaser.Scene {
     const gridBottom = countY - height * 0.04;
     const availableGridHeight = Math.max(gridBottom - gridTop, height * 0.1);
 
-    const rowSpacingFactor = 1.48;
-    const lastRowExtra = 1.15;
+    const rowSpacingFactor = 1.6;
+    const lastRowExtra = 1.25;
     const cardSizeByHeight = availableGridHeight / (rowSpacingFactor * (rows - 1) + lastRowExtra);
     const cardSizeByWidth = width / (cols + 1);
     const cardSize = Math.min(cardSizeByWidth, cardSizeByHeight);
@@ -144,11 +144,14 @@ export class DeckSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.toggleUnit(unit.id));
 
+    const labelFontSize = Math.max(8, Math.round(size * 0.19));
     this.add
       .text(x, y + size * 0.62, unit.name, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(11)}px`,
+        fontSize: `${px(labelFontSize)}px`,
         color: '#c9c2af',
+        align: 'center',
+        wordWrap: { width: size * 1.2 },
       })
       .setOrigin(0.5);
 

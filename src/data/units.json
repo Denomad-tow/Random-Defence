@@ -158,5 +158,145 @@
     "attackSpeed": 0,
     "range": 0,
     "effects": [{ "type": "goldGen", "value": 3, "interval": 2 }]
+  },
+  {
+    "id": "pierce_normal",
+    "name": "창끝 견습생",
+    "rarity": "normal",
+    "role": "pierce",
+    "attack": 14,
+    "attackSpeed": 0.9,
+    "range": 2,
+    "effects": [{ "type": "pierce" }]
+  },
+  {
+    "id": "multishot_normal",
+    "name": "쌍시위 견습생",
+    "rarity": "normal",
+    "role": "multishot",
+    "attack": 7,
+    "attackSpeed": 0.9,
+    "range": 2,
+    "effects": [{ "type": "multishot" }]
+  },
+  {
+    "id": "chain_normal",
+    "name": "전기 견습생",
+    "rarity": "normal",
+    "role": "chain",
+    "attack": 8,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "chain" }]
+  },
+  {
+    "id": "execute_normal",
+    "name": "암살 견습생",
+    "rarity": "normal",
+    "role": "execute",
+    "attack": 12,
+    "attackSpeed": 0.85,
+    "range": 1,
+    "effects": [{ "type": "execute" }]
+  },
+  {
+    "id": "manaLeech_normal",
+    "name": "마나포식 견습생",
+    "rarity": "normal",
+    "role": "manaLeech",
+    "attack": 7,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "manaLeech", "chance": 0.3, "value": 2 }]
+  },
+  {
+    "id": "frostAura_normal",
+    "name": "냉기결계 견습생",
+    "rarity": "normal",
+    "role": "frostAura",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 2,
+    "effects": [{ "type": "frostAura", "value": 0.2 }]
+  },
+  {
+    "id": "critStrike_normal",
+    "name": "일격 견습생",
+    "rarity": "normal",
+    "role": "critStrike",
+    "attack": 10,
+    "attackSpeed": 0.8,
+    "range": 2,
+    "effects": [{ "type": "critStrike", "chance": 0.2, "multiplier": 3 }]
+  },
+  {
+    "id": "pierce_uncommon",
+    "name": "창검 용병",
+    "rarity": "uncommon",
+    "role": "pierce",
+    "attack": 18,
+    "attackSpeed": 0.95,
+    "range": 2,
+    "effects": [{ "type": "pierce" }]
+  },
+  {
+    "id": "multishot_uncommon",
+    "name": "쌍시위 용병",
+    "rarity": "uncommon",
+    "role": "multishot",
+    "attack": 9,
+    "attackSpeed": 0.95,
+    "range": 2,
+    "effects": [{ "type": "multishot" }]
+  },
+  {
+    "id": "chain_uncommon",
+    "name": "감전 주술사",
+    "rarity": "uncommon",
+    "role": "chain",
+    "attack": 10,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "chain" }]
+  },
+  {
+    "id": "execute_uncommon",
+    "name": "암살 용병",
+    "rarity": "uncommon",
+    "role": "execute",
+    "attack": 15,
+    "attackSpeed": 0.9,
+    "range": 1,
+    "effects": [{ "type": "execute" }]
+  },
+  {
+    "id": "manaLeech_uncommon",
+    "name": "마나포식 주술사",
+    "rarity": "uncommon",
+    "role": "manaLeech",
+    "attack": 9,
+    "attackSpeed": 1.0,
+    "range": 2,
+    "effects": [{ "type": "manaLeech", "chance": 0.35, "value": 3 }]
+  },
+  {
+    "id": "frostAura_uncommon",
+    "name": "냉기결계 주술사",
+    "rarity": "uncommon",
+    "role": "frostAura",
+    "attack": 0,
+    "attackSpeed": 0,
+    "range": 2,
+    "effects": [{ "type": "frostAura", "value": 0.28 }]
+  },
+  {
+    "id": "critStrike_uncommon",
+    "name": "일격 용병",
+    "rarity": "uncommon",
+    "role": "critStrike",
+    "attack": 13,
+    "attackSpeed": 0.85,
+    "range": 2,
+    "effects": [{ "type": "critStrike", "chance": 0.25, "multiplier": 3 }]
   }
 ]

@@ -10,8 +10,8 @@ import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
-const ROWS_PER_PAGE = 4;
-const COLS = 4;
+const ROWS_PER_PAGE = 6;
+const COLS = 3;
 
 export class CollectionScene extends Phaser.Scene {
   private page = 0;
@@ -95,60 +95,64 @@ export class CollectionScene extends Phaser.Scene {
   }
 
   private drawCard(unit: UnitDef, x0: number, colWidth: number, y: number, rowHeight: number): void {
-    const pad = colWidth * 0.05;
+    const pad = colWidth * 0.04;
     const cardX = x0 + pad;
     const cardW = colWidth - pad * 2;
-    const cardTop = y - rowHeight * 0.46;
-    const cardH = rowHeight * 0.92;
-    const cx = cardX + cardW / 2;
-    const innerPad = cardH * 0.06;
+    const cardTop = y - rowHeight * 0.42;
+    const cardH = rowHeight * 0.84;
 
     const cardBg = this.add.graphics();
     cardBg.fillStyle(0x151a28, 0.85);
-    cardBg.fillRoundedRect(cardX, cardTop, cardW, cardH, px(6));
+    cardBg.fillRoundedRect(cardX, cardTop, cardW, cardH, px(8));
     cardBg.lineStyle(px(1), 0xd4b36a, 0.4);
-    cardBg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(6));
+    cardBg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(8));
 
-    // Icon is the dominant visual (bigger than the text) so units are told
-    // apart by their gem color/sigil at a glance, not just by name text.
-    // Level-up button is anchored to the bottom of the card (fixed height);
-    // name/level are stacked top-down below the icon using each text's
-    // *measured* height, so a 2-line name can never overlap the line below.
-    const buttonHeight = cardH * 0.2;
-    const buttonY = cardTop + cardH - buttonHeight / 2 - innerPad * 0.4;
+    // Balanced 3-part layout: icon (left) / name+level (center) / level-up
+    // button (right). Icon and button are vertically centered on the card;
+    // the name+level text block is stacked using *measured* heights so a
+    // 2-line name never overlaps the level line below it.
+    const innerPad = cardW * 0.04;
+    const iconAreaWidth = cardW * 0.3;
+    const buttonAreaWidth = cardW * 0.34;
+    const textAreaWidth = cardW - iconAreaWidth - buttonAreaWidth;
 
-    const iconSize = Math.min(cardW * 0.72, cardH * 0.44);
-    const iconY = cardTop + innerPad + iconSize / 2;
+    const iconSize = Math.min(iconAreaWidth * 0.85, cardH * 0.78);
+    const iconX = cardX + iconAreaWidth / 2;
     const sigil = ROLE_SIGILS[unit.role];
     const key = `collicon-${unit.id}-${Math.round(iconSize)}`;
     createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, Math.round(iconSize));
-    this.add.image(cx, iconY, key).setDisplaySize(iconSize * 0.96, iconSize * 0.96);
+    this.add.image(iconX, y, key).setDisplaySize(iconSize, iconSize);
 
     const count = this.ownedCounts.get(unit.id) ?? 0;
     const level = getUnitLevel(unit.id);
+    const textCx = cardX + iconAreaWidth + textAreaWidth / 2;
+    const textWrapWidth = textAreaWidth - innerPad;
 
-    const nameTop = iconY + iconSize / 2 + innerPad * 0.4;
+    const nameTop = cardTop + cardH * 0.2;
     const nameText = this.add
-      .text(cx, nameTop, unit.name, {
+      .text(textCx, nameTop, unit.name, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(7.5)}px`,
+        fontSize: `${px(10)}px`,
         color: '#f0e9d8',
         align: 'center',
-        wordWrap: { width: cardW * 0.94 },
+        wordWrap: { width: textWrapWidth },
         lineSpacing: px(1),
       })
       .setOrigin(0.5, 0);
 
-    const subTop = nameTop + nameText.height + innerPad * 0.25;
+    const subTop = nameTop + nameText.height + cardH * 0.05;
     this.add
-      .text(cx, subTop, `Lv.${level} · ${count}개`, {
+      .text(textCx, subTop, `Lv.${level} · ${count}개`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(6.5)}px`,
+        fontSize: `${px(8)}px`,
         color: '#9a917d',
+        align: 'center',
+        wordWrap: { width: textWrapWidth },
       })
       .setOrigin(0.5, 0);
 
-    this.drawLevelUpButton(unit, count, level, cx, buttonY, cardW * 0.9, buttonHeight);
+    const buttonX = cardX + cardW - buttonAreaWidth / 2;
+    this.drawLevelUpButton(unit, count, level, buttonX, y, buttonAreaWidth * 0.88, cardH * 0.6);
   }
 
   private drawLevelUpButton(

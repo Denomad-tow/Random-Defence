@@ -88,6 +88,7 @@ export class GameScene extends Phaser.Scene {
   private showRange = false;
   private rangeGraphics?: Phaser.GameObjects.Graphics;
   private rangeToggleText?: Phaser.GameObjects.Text;
+  private enhanceConfirmContainer?: Phaser.GameObjects.Container;
 
   constructor() {
     super('game');
@@ -105,6 +106,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Phaser의 드래그 감지 최소 거리가 기본값 0이라, 살짝 떨리는 탭도 드래그로
+    // 인식돼 탭 동작(강화 확인 창 등)이 씹히는 문제가 있었다. 일정 거리 이상
+    // 움직여야만 드래그로 인정하도록 최소 거리를 둔다.
+    this.input.dragDistanceThreshold = px(10);
+
     this.waveState = createInitialWaveState();
     this.economy = createInitialEconomy();
     this.placedUnits = new Map();
@@ -680,6 +686,7 @@ export class GameScene extends Phaser.Scene {
   private layout(): void {
     this.children.removeAll(true);
     this.monsters = [];
+    this.enhanceConfirmContainer = undefined;
 
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#07080d');
@@ -867,7 +874,7 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => sprite.setData('dragMoved', false))
       .on('pointerup', () => {
-        if (!sprite.getData('dragMoved')) this.tryEnhance(index);
+        if (!sprite.getData('dragMoved')) this.handleUnitTap(index);
       });
     sprite.setData('cellIndex', index);
     this.input.setDraggable(sprite);
@@ -936,7 +943,131 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  private tryEnhance(index: number): void {
+  private handleUnitTap(index: number): void {
+    const placed = this.placedUnits.get(index);
+    if (!placed) return;
+
+    const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
+    if (!cell) return;
+
+    const level = this.enhanceLevels.get(placed.unit.id) ?? 0;
+
+    if (!canEnhance(level)) {
+      this.spawnFloatingText(cell.x, cell.y, `최대 강화(Lv.${MAX_ENHANCE_LEVEL})`, '#9a917d');
+      return;
+    }
+
+    const cost = enhanceCost(level);
+    if (this.economy.mana < cost) {
+      this.spawnFloatingText(cell.x, cell.y, '마나 부족', '#ff8a8a');
+      return;
+    }
+
+    this.showEnhanceConfirm(index, placed, level, cost);
+  }
+
+  private showEnhanceConfirm(index: number, placed: PlacedUnit, level: number, cost: number): void {
+    this.enhanceConfirmContainer?.destroy(true);
+
+    const { width, height } = this.scale;
+    const container = this.add.container(0, 0).setDepth(900);
+    this.enhanceConfirmContainer = container;
+
+    const backdrop = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.55);
+    container.add(backdrop);
+
+    const cardWidth = Math.min(width * 0.78, px(320));
+    const cardHeight = height * 0.22;
+    const cardY = height * 0.5;
+
+    const cardBg = this.add.graphics();
+    cardBg.fillStyle(0x151a28, 0.97);
+    cardBg.fillRoundedRect(width / 2 - cardWidth / 2, cardY - cardHeight / 2, cardWidth, cardHeight, px(14));
+    cardBg.lineStyle(px(2), 0xd4b36a, 0.9);
+    cardBg.strokeRoundedRect(width / 2 - cardWidth / 2, cardY - cardHeight / 2, cardWidth, cardHeight, px(14));
+    container.add(cardBg);
+
+    const title = this.add
+      .text(width / 2, cardY - cardHeight * 0.28, `${placed.unit.name} 강화할까요?`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(15)}px`,
+        color: '#f6e6b4',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    container.add(title);
+
+    const subtitle = this.add
+      .text(width / 2, cardY - cardHeight * 0.02, `강화 ${level} → ${level + 1} · 비용 ${cost}마나`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#9a917d',
+      })
+      .setOrigin(0.5);
+    container.add(subtitle);
+
+    const buttonY = cardY + cardHeight * 0.28;
+    const buttonWidth = cardWidth * 0.42;
+    const buttonHeight = cardHeight * 0.32;
+    const gap = cardWidth * 0.06;
+    const cancelX = width / 2 - buttonWidth / 2 - gap / 2;
+    const confirmX = width / 2 + buttonWidth / 2 + gap / 2;
+
+    const cancelBg = this.add.graphics();
+    cancelBg.fillStyle(0x1f2536, 1);
+    cancelBg.fillRoundedRect(cancelX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    cancelBg.lineStyle(px(1.5), 0x555555, 0.9);
+    cancelBg.strokeRoundedRect(cancelX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    container.add(cancelBg);
+
+    const cancelText = this.add
+      .text(cancelX, buttonY, '취소', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#9a917d',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    container.add(cancelText);
+
+    const cancelZone = this.add.zone(cancelX, buttonY, buttonWidth, buttonHeight).setInteractive({ useHandCursor: true });
+    container.add(cancelZone);
+
+    const confirmBg = this.add.graphics();
+    confirmBg.fillStyle(0x2a2416, 1);
+    confirmBg.fillRoundedRect(confirmX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    confirmBg.lineStyle(px(1.5), 0xd4b36a, 1);
+    confirmBg.strokeRoundedRect(confirmX - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    container.add(confirmBg);
+
+    const confirmText = this.add
+      .text(confirmX, buttonY, '강화', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#ffd98a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    container.add(confirmText);
+
+    const confirmZone = this.add
+      .zone(confirmX, buttonY, buttonWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true });
+    container.add(confirmZone);
+
+    const close = () => {
+      if (this.enhanceConfirmContainer === container) this.enhanceConfirmContainer = undefined;
+      container.destroy(true);
+    };
+
+    cancelZone.on('pointerdown', close);
+    confirmZone.on('pointerdown', () => {
+      close();
+      this.performEnhance(index);
+    });
+  }
+
+  private performEnhance(index: number): void {
     const placed = this.placedUnits.get(index);
     if (!placed) return;
 

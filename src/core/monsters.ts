@@ -4,7 +4,7 @@ export interface MonsterKind {
   id: MonsterKindId;
   label: string;
   baseHp: number;
-  speed: number;
+  // 길을 따라 이동하는 속도. 단위: 초당 슬롯 칸 몇 개 만큼 이동하는가.
   crawlSpeed: number;
   sizeRatio: number;
   eyeColor: string;
@@ -17,7 +17,6 @@ export const MONSTER_KINDS: Record<MonsterKindId, MonsterKind> = {
     id: 'normal',
     label: '그림자 잔당',
     baseHp: 10,
-    speed: 0.16,
     crawlSpeed: 0.5,
     sizeRatio: 0.55,
     eyeColor: '#ff5d5d',
@@ -27,7 +26,6 @@ export const MONSTER_KINDS: Record<MonsterKindId, MonsterKind> = {
     id: 'elite',
     label: '그림자 정예',
     baseHp: 45,
-    speed: 0.12,
     crawlSpeed: 0.35,
     sizeRatio: 0.75,
     eyeColor: '#ff2e2e',
@@ -38,7 +36,6 @@ export const MONSTER_KINDS: Record<MonsterKindId, MonsterKind> = {
     id: 'boss',
     label: '그림자 우두머리',
     baseHp: 220,
-    speed: 0.08,
     crawlSpeed: 0.22,
     sizeRatio: 1.3,
     eyeColor: '#ff0000',

@@ -3,12 +3,14 @@ import {
   computeBoardLayout,
   getCellPositions,
   cellIndex,
-  FIELD_COLS,
+  resolveCorridorPoint,
   FIELD_ROWS,
+  type BoardLayout,
   type CellPosition,
 } from '../core/board';
-import { computeMonsterPath, createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
+import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
 import { MONSTER_KINDS, type MonsterKindId } from '../core/monsters';
+import { pickRandomMapPreset, type MapPreset } from '../core/mapPresets';
 import { NORMAL_UNITS, pickRandomUnit, ROLE_ATTACK_COLORS, MAX_STAR, type UnitDef, type UnitEffect } from '../core/units';
 import {
   tickStatusEffects,
@@ -64,8 +66,7 @@ export class GameScene extends Phaser.Scene {
   private cellSize = 0;
   private boardStep = 0;
   private fieldBottomY = 0;
-  private fieldLeftX = 0;
-  private fieldRightX = 0;
+  private currentMap!: MapPreset;
   private waveState: WaveState = createInitialWaveState();
   private economy: EconomyState = createInitialEconomy();
   private placedUnits = new Map<number, PlacedUnit>();
@@ -113,6 +114,7 @@ export class GameScene extends Phaser.Scene {
     this.pendingSummon = undefined;
     this.pendingSummonPreEconomy = undefined;
     this.placementHighlights = [];
+    this.currentMap = pickRandomMapPreset();
 
     this.layout();
     this.scale.on('resize', () => this.layout());
@@ -253,6 +255,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateMonsters(dt: number): void {
+    const pathLength = this.monsterPath.getLength();
+
     this.monsters.forEach((monster) => {
       const status = (monster.getData('status') as StatusEffects) ?? {};
       const tickResult = tickStatusEffects(status, dt);
@@ -264,33 +268,13 @@ export class GameScene extends Phaser.Scene {
       }
 
       const speedMultiplier = effectiveSpeedMultiplier(tickResult.status);
-      const phase = monster.getData('phase') as 'approach' | 'crawl';
+      const pxPerSec = (monster.getData('crawlSpeed') as number) * this.boardStep * speedMultiplier;
+      const tStep = pathLength > 0 ? (pxPerSec * dt) / pathLength : 0;
+      const t = Math.min(1, (monster.getData('t') as number) + tStep);
+      monster.setData('t', t);
 
-      if (phase === 'approach') {
-        const speed = (monster.getData('speed') as number) * speedMultiplier;
-        const t = Math.min(1, (monster.getData('t') as number) + speed * dt);
-        monster.setData('t', t);
-        const point = this.monsterPath.getPoint(t);
-
-        if (t >= 1) {
-          const laneX = Phaser.Math.Clamp(
-            point.x + (monster.getData('scatterX') as number),
-            this.fieldLeftX,
-            this.fieldRightX,
-          );
-          monster.setData('phase', 'crawl');
-          monster.setPosition(laneX, point.y);
-        } else {
-          monster.setPosition(point.x, point.y);
-        }
-        return;
-      }
-
-      if (monster.y < this.fieldBottomY) {
-        const crawlSpeed = (monster.getData('crawlSpeed') as number) * this.boardStep * speedMultiplier;
-        const y = Math.min(this.fieldBottomY, monster.y + crawlSpeed * dt);
-        monster.setPosition(monster.x, y);
-      }
+      const point = this.monsterPath.getPoint(t);
+      monster.setPosition(point.x, point.y);
     });
   }
 
@@ -708,8 +692,6 @@ export class GameScene extends Phaser.Scene {
     this.boardCells = getCellPositions(boardLayout);
     this.cellSize = boardLayout.cellSize;
     this.boardStep = boardLayout.cellSize + boardLayout.gap;
-    this.fieldLeftX = boardLayout.originX - boardLayout.cellSize * 0.5;
-    this.fieldRightX = boardLayout.originX + (FIELD_COLS - 1) * this.boardStep + boardLayout.cellSize * 0.5;
 
     const buttonY = Math.min(height * 0.92, fieldTop + fieldAreaHeight + boardLayout.cellSize * 1.1);
     const buttonHeight = boardLayout.cellSize * 0.9;
@@ -717,14 +699,7 @@ export class GameScene extends Phaser.Scene {
       boardLayout.originY + (FIELD_ROWS - 1) * this.boardStep + boardLayout.cellSize * 0.55;
     this.fieldBottomY = Math.min(naturalFieldBottomY, buttonY - buttonHeight / 2 - boardLayout.cellSize * 0.35);
 
-    const boardWidth = boardLayout.cellSize * FIELD_COLS + boardLayout.gap * (FIELD_COLS - 1);
-    const laneWidth = Math.min(boardWidth * 1.15, width * 0.9);
-    const pathPoints = computeMonsterPath(
-      width / 2,
-      laneWidth,
-      headerHeight,
-      fieldTop - boardLayout.cellSize / 2 - px(10),
-    );
+    const pathPoints = this.resolveMapPathPoints(boardLayout, headerHeight);
     this.monsterPath = this.buildCurve(pathPoints);
     this.drawPath(this.monsterPath);
     this.drawFieldSlots(this.boardCells, boardLayout.cellSize);
@@ -812,6 +787,21 @@ export class GameScene extends Phaser.Scene {
     this.add.image(0, 0, starKey).setOrigin(0, 0).setAlpha(0.8);
   }
 
+  // 현재 판에 고른 맵(this.currentMap)의 길 좌표(칸 사이 틈)를 실제 화면 픽셀
+  // 좌표로 바꾼다. 맨 위는 화면 상단(입구), 맨 아래는 기존 "몬스터가 멈춰서
+  // 공격받는 위치"(fieldBottomY)에 맞춰 길이 끝나도록 한다.
+  private resolveMapPathPoints(boardLayout: BoardLayout, headerHeight: number): { x: number; y: number }[] {
+    const waypoints = this.currentMap.waypoints;
+    const entry = resolveCorridorPoint(waypoints[0].gapCol, waypoints[0].gapRow, boardLayout);
+    const topPoint = { x: entry.x, y: headerHeight };
+
+    const corridorPoints = waypoints.map((wp) => resolveCorridorPoint(wp.gapCol, wp.gapRow, boardLayout));
+    const lastPoint = corridorPoints[corridorPoints.length - 1];
+    corridorPoints[corridorPoints.length - 1] = { x: lastPoint.x, y: this.fieldBottomY };
+
+    return [topPoint, ...corridorPoints];
+  }
+
   private buildCurve(points: { x: number; y: number }[]): Phaser.Curves.Path {
     const curve = new Phaser.Curves.Path(points[0].x, points[0].y);
     curve.splineTo(points.slice(1).map((p) => new Phaser.Math.Vector2(p.x, p.y)));
@@ -819,7 +809,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawPath(curve: Phaser.Curves.Path): void {
-    const samples = curve.getPoints(48);
+    const samples = curve.getPoints(64);
 
     const outer = this.add.graphics();
     outer.lineStyle(px(9), 0x8a6a2c, 0.55);
@@ -1219,11 +1209,8 @@ export class GameScene extends Phaser.Scene {
 
     const start = this.monsterPath.getPoint(0);
     const monster = this.add.image(start.x, start.y, textureKey);
-    monster.setData('phase', 'approach');
     monster.setData('t', 0);
-    monster.setData('speed', kind.speed);
     monster.setData('crawlSpeed', kind.crawlSpeed);
-    monster.setData('scatterX', (Math.random() - 0.5) * this.cellSize * 2.6);
     monster.setData('hp', hp);
     monster.setData('maxHp', hp);
     monster.setData('kind', kind.id);

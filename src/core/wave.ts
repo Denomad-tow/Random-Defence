@@ -1,10 +1,5 @@
 import type { MonsterKindId } from './monsters';
 
-export interface PathPoint {
-  x: number;
-  y: number;
-}
-
 export const MONSTERS_PER_STAGE = 10;
 export const STAGES_PER_BOSS = 10;
 export const STAGE_HP_GROWTH = 1.12;
@@ -52,22 +47,4 @@ export function nextSpawn(state: WaveState): SpawnResult {
 
 export function stageHpMultiplier(stage: number): number {
   return STAGE_HP_GROWTH ** (stage - 1);
-}
-
-export function computeMonsterPath(
-  centerX: number,
-  laneWidth: number,
-  screenTop: number,
-  boardTopY: number,
-): PathPoint[] {
-  const left = centerX - laneWidth / 2;
-  const right = centerX + laneWidth / 2;
-  const midY = screenTop + (boardTopY - screenTop) * 0.55;
-
-  return [
-    { x: centerX, y: screenTop },
-    { x: right, y: midY },
-    { x: left, y: midY + (boardTopY - midY) * 0.6 },
-    { x: centerX, y: boardTopY },
-  ];
 }

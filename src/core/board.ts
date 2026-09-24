@@ -54,3 +54,15 @@ export function getCellPositions(layout: BoardLayout): CellPosition[] {
 export function cellIndex(row: number, col: number): number {
   return row * FIELD_COLS + col;
 }
+
+// gapCol/gapRow는 슬롯 칸과 칸 "사이 틈"의 좌표다. gapCol이 정수 n이면 (n-1)번째
+// 칸과 n번째 칸 사이의 빈 공간(또는 맨 왼쪽/오른쪽 바깥)을 가리킨다. gapRow도
+// 마찬가지로 행 사이의 빈 공간을 가리킨다. 몬스터 길이 이 좌표만 지나가게 하면
+// 항상 슬롯 칸이 아니라 칸 사이 틈으로만 지나가게 된다.
+export function resolveCorridorPoint(gapCol: number, gapRow: number, layout: BoardLayout): { x: number; y: number } {
+  const step = layout.cellSize + layout.gap;
+  return {
+    x: layout.originX - step / 2 + gapCol * step,
+    y: layout.originY - step / 2 + gapRow * step,
+  };
+}

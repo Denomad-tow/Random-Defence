@@ -36,3 +36,19 @@ export function addToCollection(unitId: string): string[] {
   saveCollection(next);
   return next;
 }
+
+export function consumeDuplicates(unitId: string, count: number): void {
+  const collection = loadCollection();
+  let remaining = count;
+  const next: string[] = [];
+
+  collection.forEach((id) => {
+    if (id === unitId && remaining > 0) {
+      remaining -= 1;
+      return;
+    }
+    next.push(id);
+  });
+
+  saveCollection(next);
+}

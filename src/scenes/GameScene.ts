@@ -33,6 +33,7 @@ import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
 import { getBoxType } from '../meta/gacha';
 import { computeRunReward, type RunReward } from '../meta/rewards';
+import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -313,8 +314,7 @@ export class GameScene extends Phaser.Scene {
 
       const rangePx = placed.unit.range * this.boardStep;
       const bonus = buffBonuses.get(index) ?? 0;
-      const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
-      const attack = Math.round(placed.unit.attack * statMultiplier(enhanceLevel));
+      const attack = Math.round(placed.unit.attack * this.totalMultiplier(placed.unit));
 
       if (placed.unit.effects.some((e) => e.type === 'multishot')) {
         const effect = placed.unit.effects.find((e) => e.type === 'multishot');
@@ -342,8 +342,7 @@ export class GameScene extends Phaser.Scene {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
-      const value = ((effect?.value as number) ?? 0.2) * statMultiplier(enhanceLevel);
+      const value = ((effect?.value as number) ?? 0.2) * this.totalMultiplier(placed.unit);
       const rangePx = placed.unit.range * this.boardStep;
 
       this.monsters.forEach((monster) => {
@@ -366,8 +365,7 @@ export class GameScene extends Phaser.Scene {
       const bufferCell = this.boardCells.find((c) => cellIndex(c.row, c.col) === buffIndex);
       if (!bufferCell) return;
 
-      const enhanceLevel = this.enhanceLevels.get(buffer.unit.id) ?? 0;
-      const value = ((effect?.value as number) ?? 0) * statMultiplier(enhanceLevel);
+      const value = ((effect?.value as number) ?? 0) * this.totalMultiplier(buffer.unit);
       const rangePx = buffer.unit.range * this.boardStep;
 
       this.placedUnits.forEach((_ally, allyIndex) => {
@@ -387,8 +385,7 @@ export class GameScene extends Phaser.Scene {
   private performGoldGen(cell: CellPosition, placed: PlacedUnit): void {
     const effect = placed.unit.effects[0];
     const interval = (effect?.interval as number) ?? 2;
-    const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
-    const value = Math.round(((effect?.value as number) ?? 1) * statMultiplier(enhanceLevel));
+    const value = Math.round(((effect?.value as number) ?? 1) * this.totalMultiplier(placed.unit));
 
     placed.cooldown = interval;
     this.economy = { ...this.economy, mana: this.economy.mana + value };
@@ -893,6 +890,11 @@ export class GameScene extends Phaser.Scene {
 
     placed.sprite = sprite;
     placed.label = label;
+  }
+
+  private totalMultiplier(unit: UnitDef): number {
+    const enhanceLevel = this.enhanceLevels.get(unit.id) ?? 0;
+    return statMultiplier(enhanceLevel) * levelStatMultiplier(getUnitLevel(unit.id));
   }
 
   private tryEnhance(index: number): void {

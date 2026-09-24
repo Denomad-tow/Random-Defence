@@ -87,7 +87,7 @@ export class DeckSelectScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const boxButton = this.add
-      .text(width - px(12), height * 0.045, `상자 (${totalBoxes})`, {
+      .text(width - px(12), height * 0.04, `상자 (${totalBoxes})`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(13)}px`,
         color: '#ffd98a',
@@ -97,6 +97,18 @@ export class DeckSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.start('box'));
     boxButton.setPadding(px(8), px(8), px(8), px(8));
+
+    const collectionButton = this.add
+      .text(width - px(12), height * 0.09, '컬렉션', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#9fd8ff',
+        fontStyle: 'bold',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('collection'));
+    collectionButton.setPadding(px(8), px(8), px(8), px(8));
 
     const devButton = this.add
       .text(px(12), height * 0.045, '[개발자] 전체 획득', {

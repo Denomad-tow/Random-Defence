@@ -113,25 +113,31 @@ export class DeckSelectScene extends Phaser.Scene {
     const boxes = loadBoxes();
     const totalBoxes = Object.values(boxes).reduce((sum, n) => sum + n, 0);
 
-    const navY = height * 0.185;
-    const navGap = width * 0.025;
-    const navWidth = (width * 0.94 - navGap * 3) / 4;
-    const navHeight = height * 0.05;
-    const navStartX = width * 0.03 + navWidth / 2;
-
     const navButtons: Array<{ label: string; color: string; onClick: () => void }> = [
       { label: '연구', color: '#a8ffb0', onClick: () => this.scene.start('research') },
       { label: `상자 (${totalBoxes})`, color: '#ffd98a', onClick: () => this.scene.start('box') },
       { label: '컬렉션', color: '#9fd8ff', onClick: () => this.scene.start('collection') },
+      { label: '우편함', color: '#ffb0e0', onClick: () => this.scene.start('mailbox') },
       { label: '로그아웃', color: '#ff9a9a', onClick: () => this.handleLogout() },
     ];
 
+    const navCols = 3;
+    const navGap = width * 0.025;
+    const navWidth = (width * 0.94 - navGap * (navCols - 1)) / navCols;
+    const navHeight = height * 0.05;
+    const navRowGap = height * 0.015;
+    const navStartX = width * 0.03 + navWidth / 2;
+    const navTop = height * 0.175;
+
     navButtons.forEach((btn, i) => {
-      const x = navStartX + i * (navWidth + navGap);
-      this.drawNavButton(x, navY, navWidth, navHeight, btn.label, btn.color, btn.onClick);
+      const col = i % navCols;
+      const row = Math.floor(i / navCols);
+      const x = navStartX + col * (navWidth + navGap);
+      const y = navTop + row * (navHeight + navRowGap);
+      this.drawNavButton(x, y, navWidth, navHeight, btn.label, btn.color, btn.onClick);
     });
 
-    this.drawSlotTabs(width, height * 0.25);
+    this.drawSlotTabs(width, height * 0.32);
 
     const owned = this.ownedUnits();
     const cols = 8;
@@ -143,7 +149,7 @@ export class DeckSelectScene extends Phaser.Scene {
     // for very short screens.
     const rowSpacingFactor = 1.45;
     const lastRowExtra = 1.1;
-    const gridTop = height * 0.3;
+    const gridTop = height * 0.37;
     const rowsFactor = rowSpacingFactor * (rowsPerPage - 1) + lastRowExtra;
     const cardSizeByWidth = width / (cols + 1.4);
     const cardSizeByHeight = (height * 0.5) / rowsFactor;

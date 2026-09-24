@@ -191,14 +191,17 @@ function injectStyle(): void {
   document.head.appendChild(style);
 }
 
-export function mountPartyOverlay(nickname: string, onBack: () => void): { unmount: () => void } {
+export function mountPartyOverlay(
+  nickname: string,
+  onBack: () => void,
+  onGameStart: () => void,
+): { unmount: (leaveChannel?: boolean) => void } {
   injectStyle();
 
   let view: 'menu' | 'waiting' = 'menu';
   let members: PartyMember[] = [];
   let busy = false;
   let errorMsg = '';
-  let gameStarted = false;
   let codeInputValue = '';
 
   const overlay = document.createElement('div');
@@ -211,8 +214,7 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
   }
 
   function handleRoomStart(): void {
-    gameStarted = true;
-    if (view === 'waiting') render();
+    onGameStart();
   }
 
   function handleCreate(): void {
@@ -224,7 +226,6 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
     createRoom(nickname, handleMembersChange, handleRoomStart)
       .then(() => {
         busy = false;
-        gameStarted = false;
         view = 'waiting';
         render();
       })
@@ -251,7 +252,6 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
     joinRoom(trimmed, nickname, handleMembersChange, handleRoomStart)
       .then(() => {
         busy = false;
-        gameStarted = false;
         view = 'waiting';
         render();
       })
@@ -271,7 +271,6 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
     leavePartyRoom();
     view = 'menu';
     members = [];
-    gameStarted = false;
     errorMsg = '';
     codeInputValue = '';
     render();
@@ -307,7 +306,7 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
 
     const subtitle = document.createElement('div');
     subtitle.className = 'rd-party-subtitle';
-    subtitle.textContent = '친구와 같은 방에 모여보세요 (베타 · 대기실만 가능)';
+    subtitle.textContent = '친구와 같은 방에 모여보세요 (베타)';
     card.appendChild(subtitle);
 
     const createSection = document.createElement('div');
@@ -401,10 +400,7 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
     card.appendChild(list);
 
     const status = document.createElement('div');
-    if (gameStarted) {
-      status.className = 'rd-party-status rd-party-status-live';
-      status.textContent = '🎉 게임 시작! (실제 협동 전투는 다음 업데이트에서 연결돼요)';
-    } else if (isRoomHost()) {
+    if (isRoomHost()) {
       status.className = 'rd-party-status';
       status.textContent = `모인 인원: ${members.length}명 · 준비되면 아래 버튼을 눌러주세요`;
     } else {
@@ -413,7 +409,7 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
     }
     card.appendChild(status);
 
-    if (isRoomHost() && !gameStarted) {
+    if (isRoomHost()) {
       const startBtn = document.createElement('button');
       startBtn.type = 'button';
       startBtn.className = 'rd-party-btn';
@@ -430,8 +426,8 @@ export function mountPartyOverlay(nickname: string, onBack: () => void): { unmou
     card.appendChild(leaveBtn);
   }
 
-  function unmount(): void {
-    leavePartyRoom();
+  function unmount(leaveChannel = true): void {
+    if (leaveChannel) leavePartyRoom();
     overlay.remove();
   }
 

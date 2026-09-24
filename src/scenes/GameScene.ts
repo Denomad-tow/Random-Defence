@@ -260,17 +260,12 @@ export class GameScene extends Phaser.Scene {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      if (placed.unit.role === 'goldGen') {
+      if (placed.unit.effects.some((e) => e.type === 'goldGen')) {
         this.performGoldGen(cell, placed);
         return;
       }
 
-      if (
-        placed.unit.role === 'buff' ||
-        placed.unit.role === 'frostAura' ||
-        placed.unit.attack <= 0 ||
-        placed.unit.attackSpeed <= 0
-      ) {
+      if (placed.unit.attack <= 0 || placed.unit.attackSpeed <= 0) {
         placed.cooldown = 1;
         return;
       }
@@ -280,7 +275,7 @@ export class GameScene extends Phaser.Scene {
       const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
       const attack = Math.round(placed.unit.attack * statMultiplier(enhanceLevel));
 
-      if (placed.unit.role === 'multishot') {
+      if (placed.unit.effects.some((e) => e.type === 'multishot')) {
         const effect = placed.unit.effects.find((e) => e.type === 'multishot');
         const shotCount = (effect?.count as number) ?? 2;
         const targets = this.findNearestMonsters(cell.x, cell.y, rangePx, shotCount);
@@ -300,12 +295,12 @@ export class GameScene extends Phaser.Scene {
 
   private applyFrostAuras(): void {
     this.placedUnits.forEach((placed, index) => {
-      if (placed.unit.role !== 'frostAura') return;
+      const effect = placed.unit.effects.find((e) => e.type === 'frostAura');
+      if (!effect) return;
 
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      const effect = placed.unit.effects.find((e) => e.type === 'frostAura');
       const enhanceLevel = this.enhanceLevels.get(placed.unit.id) ?? 0;
       const value = ((effect?.value as number) ?? 0.2) * statMultiplier(enhanceLevel);
       const rangePx = placed.unit.range * this.boardStep;
@@ -324,12 +319,12 @@ export class GameScene extends Phaser.Scene {
     const bonuses = new Map<number, number>();
 
     this.placedUnits.forEach((buffer, buffIndex) => {
-      if (buffer.unit.role !== 'buff') return;
+      const effect = buffer.unit.effects.find((e) => e.type === 'buff');
+      if (!effect) return;
 
       const bufferCell = this.boardCells.find((c) => cellIndex(c.row, c.col) === buffIndex);
       if (!bufferCell) return;
 
-      const effect = buffer.unit.effects.find((e) => e.type === 'buff');
       const enhanceLevel = this.enhanceLevels.get(buffer.unit.id) ?? 0;
       const value = ((effect?.value as number) ?? 0) * statMultiplier(enhanceLevel);
       const rangePx = buffer.unit.range * this.boardStep;
@@ -393,16 +388,29 @@ export class GameScene extends Phaser.Scene {
     attack: number,
   ): void {
     const color = ROLE_ATTACK_COLORS[unitDef.role] ?? 0xffffff;
+    const rarity = getRarity(unitDef.rarity);
+    const vfxScale = 1 + rarity.glow;
     const targetX = target.x;
     const targetY = target.y;
 
-    const projectile = this.add.circle(cell.x, cell.y, px(4), color, 1);
+    if (rarity.glow > 0.25) {
+      const glow = this.add.circle(cell.x, cell.y, px(9) * vfxScale, color, 0.35);
+      this.tweens.add({ targets: glow, alpha: 0, scale: 1.6, duration: 200, onComplete: () => glow.destroy() });
+    }
+
+    const projectile = this.add.circle(cell.x, cell.y, px(4) * vfxScale, color, 1);
+    const trailCount = Math.min(4, rarity.sparkleCount);
 
     this.tweens.add({
       targets: projectile,
       x: targetX,
       y: targetY,
       duration: 160,
+      onUpdate: () => {
+        if (trailCount === 0 || Math.random() > 0.5) return;
+        const spark = this.add.circle(projectile.x, projectile.y, px(2), color, 0.7);
+        this.tweens.add({ targets: spark, alpha: 0, duration: 220, onComplete: () => spark.destroy() });
+      },
       onComplete: () => {
         projectile.destroy();
         if (!target.active) return;
@@ -419,9 +427,9 @@ export class GameScene extends Phaser.Scene {
 
     this.applyRoleEffect(target, unitDef);
 
-    if (unitDef.role === 'aoe') {
-      const effect = unitDef.effects.find((e) => e.type === 'aoe');
-      const radius = ((effect?.radius as number) ?? 1) * this.boardStep;
+    const aoeEffect = unitDef.effects.find((e) => e.type === 'aoe');
+    if (aoeEffect) {
+      const radius = ((aoeEffect.radius as number) ?? 1) * this.boardStep;
 
       this.monsters.forEach((other) => {
         if (other === target || !other.active) return;
@@ -431,9 +439,9 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    if (unitDef.role === 'pierce') {
-      const effect = unitDef.effects.find((e) => e.type === 'pierce');
-      const bandWidth = ((effect?.bandWidth as number) ?? 0.5) * this.cellSize;
+    const pierceEffect = unitDef.effects.find((e) => e.type === 'pierce');
+    if (pierceEffect) {
+      const bandWidth = ((pierceEffect.bandWidth as number) ?? 0.5) * this.cellSize;
 
       this.monsters.forEach((other) => {
         if (other === target || !other.active) return;
@@ -443,9 +451,9 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    if (unitDef.role === 'chain') {
-      const effect = unitDef.effects.find((e) => e.type === 'chain');
-      const bounces = (effect?.bounces as number) ?? 2;
+    const chainEffect = unitDef.effects.find((e) => e.type === 'chain');
+    if (chainEffect) {
+      const bounces = (chainEffect.bounces as number) ?? 2;
       this.chainBounce(target.x, target.y, attack, new Set([target]), bounces);
     }
   }
@@ -453,10 +461,10 @@ export class GameScene extends Phaser.Scene {
   private computeHitDamage(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number): number {
     let damage = attack;
 
-    if (unitDef.role === 'execute') {
-      const effect = unitDef.effects.find((e) => e.type === 'execute');
-      const threshold = (effect?.threshold as number) ?? 0.25;
-      const multiplier = (effect?.multiplier as number) ?? 1.8;
+    const executeEffect = unitDef.effects.find((e) => e.type === 'execute');
+    if (executeEffect) {
+      const threshold = (executeEffect.threshold as number) ?? 0.25;
+      const multiplier = (executeEffect.multiplier as number) ?? 1.8;
       const hp = target.getData('hp') as number;
       const maxHp = (target.getData('maxHp') as number) ?? hp;
       if (maxHp > 0 && hp / maxHp <= threshold) {
@@ -464,10 +472,10 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    if (unitDef.role === 'critStrike') {
-      const effect = unitDef.effects.find((e) => e.type === 'critStrike');
-      const chance = (effect?.chance as number) ?? 0.2;
-      const multiplier = (effect?.multiplier as number) ?? 3;
+    const critEffect = unitDef.effects.find((e) => e.type === 'critStrike');
+    if (critEffect) {
+      const chance = (critEffect.chance as number) ?? 0.2;
+      const multiplier = (critEffect.multiplier as number) ?? 3;
       if (Math.random() < chance) {
         damage = Math.round(damage * multiplier);
       }
@@ -477,11 +485,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private applyManaLeech(unitDef: UnitDef): void {
-    if (unitDef.role !== 'manaLeech') return;
-
     const effect = unitDef.effects.find((e) => e.type === 'manaLeech');
-    const chance = (effect?.chance as number) ?? 0.3;
-    const value = (effect?.value as number) ?? 2;
+    if (!effect) return;
+
+    const chance = (effect.chance as number) ?? 0.3;
+    const value = (effect.value as number) ?? 2;
 
     if (Math.random() < chance) {
       this.economy = { ...this.economy, mana: this.economy.mana + value };
@@ -534,18 +542,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private applyRoleEffect(target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
-    const effect = unitDef.effects[0];
-    if (!effect) return;
+    const statusTypes = ['slow', 'stun', 'poison', 'armorBreak'];
 
-    this.applyStatusEffect(target, effect);
+    unitDef.effects
+      .filter((effect) => statusTypes.includes(effect.type))
+      .forEach((effect) => {
+        this.applyStatusEffect(target, effect);
 
-    const extraTargets = ((effect.targets as number) ?? 1) - 1;
-    if (extraTargets > 0) {
-      const nearby = this.findNearestMonsters(target.x, target.y, this.cellSize * 1.8, extraTargets + 1).filter(
-        (m) => m !== target,
-      );
-      nearby.slice(0, extraTargets).forEach((m) => this.applyStatusEffect(m, effect));
-    }
+        const extraTargets = ((effect.targets as number) ?? 1) - 1;
+        if (extraTargets > 0) {
+          const nearby = this.findNearestMonsters(target.x, target.y, this.cellSize * 1.8, extraTargets + 1).filter(
+            (m) => m !== target,
+          );
+          nearby.slice(0, extraTargets).forEach((m) => this.applyStatusEffect(m, effect));
+        }
+      });
   }
 
   private applyStatusEffect(target: Phaser.GameObjects.Image, effect: UnitEffect): void {

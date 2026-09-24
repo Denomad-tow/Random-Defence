@@ -9,6 +9,7 @@ import { loadGold } from '../meta/gold';
 import { loadBoxes } from '../meta/boxes';
 import { sortByRarityThenLevel } from '../meta/unitSort';
 import { signOut } from '../meta/auth';
+import { flushSnapshot } from '../core/cloudSync';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -418,9 +419,11 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   private handleLogout(): void {
-    void signOut().then(() => {
-      window.location.reload();
-    });
+    void flushSnapshot()
+      .then(() => signOut())
+      .then(() => {
+        window.location.reload();
+      });
   }
 
   private devUnlockAll(): void {

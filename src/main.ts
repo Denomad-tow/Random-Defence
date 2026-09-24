@@ -8,6 +8,7 @@ import { ResearchScene } from './scenes/ResearchScene';
 import { DPR } from './core/dpr';
 import { hasSession } from './meta/auth';
 import { mountLoginOverlay } from './core/loginOverlay';
+import { pullSnapshot, startCloudSync } from './core/cloudSync';
 
 function startGame(): void {
   const cssWidth = window.innerWidth;
@@ -35,15 +36,23 @@ function startGame(): void {
   });
 }
 
+async function startAfterAuth(): Promise<void> {
+  await pullSnapshot();
+  startGame();
+  startCloudSync();
+}
+
 async function boot(): Promise<void> {
   await document.fonts.ready.catch(() => undefined);
 
   if (await hasSession()) {
-    startGame();
+    await startAfterAuth();
     return;
   }
 
-  mountLoginOverlay(startGame);
+  mountLoginOverlay(() => {
+    void startAfterAuth();
+  });
 }
 
 boot();

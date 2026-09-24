@@ -83,6 +83,9 @@ export class GameScene extends Phaser.Scene {
   private pendingSummonPreEconomy?: EconomyState;
   private placementHighlights: Phaser.GameObjects.Arc[] = [];
   private deckUnitIds: string[] = NORMAL_UNITS.map((u) => u.id);
+  private showRange = false;
+  private rangeGraphics?: Phaser.GameObjects.Graphics;
+  private rangeToggleText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('game');
@@ -725,6 +728,7 @@ export class GameScene extends Phaser.Scene {
     this.monsterPath = this.buildCurve(pathPoints);
     this.drawPath(this.monsterPath);
     this.drawFieldSlots(this.boardCells, boardLayout.cellSize);
+    this.rangeGraphics = this.add.graphics();
 
     this.placedUnits.forEach((placed, index) => {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
@@ -759,6 +763,17 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
     deckButton.setPadding(px(6), px(6), px(6), px(6));
+
+    this.rangeToggleText = this.add
+      .text(width - px(12), headerHeight * 0.78, this.showRange ? '사거리 끄기' : '사거리 보기', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: this.showRange ? '#9fd8ff' : '#6a6458',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.toggleRange());
 
     this.drawSummonButton(width / 2, buttonY);
     this.refreshMana();
@@ -890,6 +905,33 @@ export class GameScene extends Phaser.Scene {
 
     placed.sprite = sprite;
     placed.label = label;
+
+    this.refreshRangeOverlay();
+  }
+
+  private toggleRange(): void {
+    this.showRange = !this.showRange;
+    this.refreshRangeOverlay();
+    this.rangeToggleText?.setText(this.showRange ? '사거리 끄기' : '사거리 보기');
+    this.rangeToggleText?.setColor(this.showRange ? '#9fd8ff' : '#6a6458');
+  }
+
+  private refreshRangeOverlay(): void {
+    if (!this.rangeGraphics) return;
+    this.rangeGraphics.clear();
+    if (!this.showRange) return;
+
+    this.placedUnits.forEach((placed, index) => {
+      const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
+      if (!cell) return;
+
+      const radius = placed.unit.range * this.boardStep;
+      const color = ROLE_ATTACK_COLORS[placed.unit.role] ?? 0x9fd8ff;
+      this.rangeGraphics!.fillStyle(color, 0.07);
+      this.rangeGraphics!.fillCircle(cell.x, cell.y, radius);
+      this.rangeGraphics!.lineStyle(px(1.5), color, 0.55);
+      this.rangeGraphics!.strokeCircle(cell.x, cell.y, radius);
+    });
   }
 
   private totalMultiplier(unit: UnitDef): number {

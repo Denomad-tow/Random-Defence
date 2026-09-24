@@ -105,10 +105,16 @@ export class ResearchScene extends Phaser.Scene {
     const level = getGeneralLevel(key);
     const labelX = x - cardW / 2 + cardW * 0.06;
 
+    // 컬렉션 화면과 동일하게, 이름/레벨 글씨 크기를 옆 버튼 크기에서
+    // 계산한 값으로 맞춘다 (버튼과 같은 계산식 공유).
+    const buttonWidth = cardW * 0.28;
+    const labelFontSize = Math.max(9, Math.round(buttonWidth * 0.13));
+    const costFontSize = Math.max(8, Math.round(buttonWidth * 0.1));
+
     this.add
       .text(labelX, y - cardH * 0.22, getGeneralLabel(key), {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
+        fontSize: `${px(labelFontSize)}px`,
         color: '#f0e9d8',
       })
       .setOrigin(0, 0.5);
@@ -116,14 +122,13 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(labelX, y + cardH * 0.05, `Lv.${level}/${MAX_RESEARCH_LEVEL}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(10)}px`,
+        fontSize: `${px(costFontSize)}px`,
         color: '#9a917d',
       })
       .setOrigin(0, 0.5);
 
-    const buttonWidth = cardW * 0.28;
     const buttonX = x + cardW / 2 - buttonWidth / 2 - cardW * 0.05;
-    this.drawResearchButton(buttonX, y, buttonWidth, cardH * 0.62, level, () => {
+    this.drawResearchButton(buttonX, y, buttonWidth, cardH * 0.62, level, labelFontSize, costFontSize, () => {
       if (levelUpGeneral(key)) {
         this.refreshGold();
         this.layout();
@@ -150,6 +155,12 @@ export class ResearchScene extends Phaser.Scene {
     const iconAreaWidth = cardW * 0.3;
     const buttonAreaWidth = cardW * 0.34;
     const textAreaWidth = cardW - iconAreaWidth - buttonAreaWidth;
+    const buttonWidth = buttonAreaWidth * 0.88;
+
+    // 컬렉션 화면과 동일한 계산식으로 이름/특성/레벨 글씨 크기를 버튼과
+    // 공유한다.
+    const labelFontSize = Math.max(9, Math.round(buttonWidth * 0.13));
+    const costFontSize = Math.max(8, Math.round(buttonWidth * 0.1));
 
     const iconSize = Math.min(iconAreaWidth * 0.85, cardH * 0.78);
     const iconX = cardX + iconAreaWidth / 2;
@@ -166,7 +177,7 @@ export class ResearchScene extends Phaser.Scene {
     const nameText = this.add
       .text(textCx, nameTop, sigil?.label ?? role, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(9.5)}px`,
+        fontSize: `${px(labelFontSize)}px`,
         color: '#f0e9d8',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -177,7 +188,7 @@ export class ResearchScene extends Phaser.Scene {
     const descText = this.add
       .text(textCx, descTop, ROLE_DESCRIPTIONS[role] ?? '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(7.5)}px`,
+        fontSize: `${px(costFontSize)}px`,
         color: '#9fd8ff',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -188,13 +199,13 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(textCx, subTop, `Lv.${level}/${MAX_RESEARCH_LEVEL}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(7.5)}px`,
+        fontSize: `${px(costFontSize)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5, 0);
 
     const buttonX = cardX + cardW - buttonAreaWidth / 2;
-    this.drawResearchButton(buttonX, y, buttonAreaWidth * 0.88, cardH * 0.6, level, () => {
+    this.drawResearchButton(buttonX, y, buttonWidth, cardH * 0.6, level, labelFontSize, costFontSize, () => {
       if (levelUpRole(role)) {
         this.refreshGold();
         this.layout();
@@ -211,10 +222,10 @@ export class ResearchScene extends Phaser.Scene {
     buttonWidth: number,
     buttonHeight: number,
     level: number,
+    labelFontSize: number,
+    costFontSize: number,
     onClick: () => void,
   ): void {
-    const labelFontSize = Math.max(9, Math.round(buttonWidth * 0.13));
-    const costFontSize = Math.max(8, Math.round(buttonWidth * 0.1));
 
     if (level >= MAX_RESEARCH_LEVEL) {
       this.add

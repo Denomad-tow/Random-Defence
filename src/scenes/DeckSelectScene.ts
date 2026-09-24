@@ -94,7 +94,7 @@ export class DeckSelectScene extends Phaser.Scene {
     this.nicknameText = this.add
       .text(px(12), px(12), this.nickname ? `${this.nickname}님` : '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
+        fontSize: `${px(16.5)}px`,
         color: '#9fd8ff',
       })
       .setOrigin(0, 0);

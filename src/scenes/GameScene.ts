@@ -95,6 +95,8 @@ export class GameScene extends Phaser.Scene {
   private nicknameText?: Phaser.GameObjects.Text;
   private lastTapIndex: number | null = null;
   private lastTapTime = 0;
+  private gameSpeed = 1;
+  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text }>();
 
   constructor() {
     super('game');
@@ -128,6 +130,9 @@ export class GameScene extends Phaser.Scene {
     this.pendingSummonPreEconomy = undefined;
     this.placementHighlights = [];
     this.currentMap = pickRandomMapPreset();
+    this.gameSpeed = 1;
+    this.time.timeScale = 1;
+    this.tweens.timeScale = 1;
 
     this.layout();
     this.scale.on('resize', () => this.layout());
@@ -169,7 +174,7 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.gameOver) return;
 
-    const dt = delta / 1000;
+    const dt = (delta / 1000) * this.gameSpeed;
     this.updateMonsters(dt);
     this.updateCombat(dt);
 
@@ -763,7 +768,7 @@ export class GameScene extends Phaser.Scene {
     this.nicknameText = this.add
       .text(px(12), headerHeight * 0.78, this.currentNickname ? `${this.currentNickname}님` : '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
+        fontSize: `${px(16.5)}px`,
         color: '#9fd8ff',
       })
       .setOrigin(0, 0.5);
@@ -789,6 +794,8 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setPadding(px(6), px(6), px(6), px(6))
       .on('pointerdown', () => this.toggleRange());
+
+    this.drawSpeedControls(width / 2, headerHeight * 1.18);
 
     this.drawSummonButton(width / 2, buttonY);
     this.refreshMana();
@@ -945,6 +952,79 @@ export class GameScene extends Phaser.Scene {
     this.refreshRangeOverlay();
     this.rangeToggleText?.setText(this.showRange ? '사거리 끄기' : '사거리 보기');
     this.rangeToggleText?.setColor(this.showRange ? '#9fd8ff' : '#6a6458');
+  }
+
+  private drawSpeedControls(centerX: number, y: number): void {
+    this.speedButtonRefs = new Map();
+
+    const speeds = [1, 2, 4, 8];
+    const gap = px(10);
+    const labelWidths = speeds.map((s) => `${s}x`.length);
+    const totalWidth = labelWidths.reduce((sum, len) => sum + len * px(11) + px(16), 0) + gap * (speeds.length - 1);
+    let cursorX = centerX - totalWidth / 2;
+
+    speeds.forEach((speed) => {
+      const label = `${speed}x`;
+      const active = speed === this.gameSpeed;
+
+      const text = this.add
+        .text(0, y, label, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(12)}px`,
+          color: active ? '#ffd98a' : '#8a8272',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0, 0.5);
+
+      const btnWidth = text.width + px(16);
+      text.setX(cursorX + px(8));
+
+      const bg = this.add.graphics();
+      bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
+      bg.fillRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
+      bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
+      bg.strokeRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
+      this.children.moveBelow(bg, text);
+
+      text.setOrigin(0.5, 0.5);
+      text.setX(cursorX + btnWidth / 2);
+
+      this.add
+        .zone(cursorX + btnWidth / 2, y, btnWidth, px(22))
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.setGameSpeed(speed));
+
+      this.speedButtonRefs.set(speed, { bg, text });
+      cursorX += btnWidth + gap;
+    });
+  }
+
+  private setGameSpeed(value: number): void {
+    this.gameSpeed = value;
+    this.time.timeScale = value;
+    this.tweens.timeScale = value;
+
+    this.speedButtonRefs.forEach((refs, btnValue) => {
+      const active = btnValue === value;
+      refs.bg.clear();
+      refs.bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
+      refs.bg.fillRoundedRect(
+        refs.text.x - refs.text.width / 2 - px(8),
+        refs.text.y - px(11),
+        refs.text.width + px(16),
+        px(22),
+        px(6),
+      );
+      refs.bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
+      refs.bg.strokeRoundedRect(
+        refs.text.x - refs.text.width / 2 - px(8),
+        refs.text.y - px(11),
+        refs.text.width + px(16),
+        px(22),
+        px(6),
+      );
+      refs.text.setColor(active ? '#ffd98a' : '#8a8272');
+    });
   }
 
   private refreshRangeOverlay(): void {

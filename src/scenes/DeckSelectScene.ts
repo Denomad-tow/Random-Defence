@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
-import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, pickRandomUnit, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, type UnitDef } from '../core/units';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
 import { loadSavedDeck, saveDeck } from '../meta/deck';
-import { ensureStarterCollection, addToCollection, loadCollection, saveCollection } from '../meta/collection';
+import { ensureStarterCollection, loadCollection, saveCollection } from '../meta/collection';
+import { loadGold } from '../meta/gold';
+import { loadBoxes } from '../meta/boxes';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -73,16 +75,19 @@ export class DeckSelectScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    const boxes = loadBoxes();
+    const totalBoxes = Object.values(boxes).reduce((sum, n) => sum + n, 0);
+
     this.add
-      .text(width / 2, height * 0.085, `보유한 유닛 중 ${DECK_SIZE}종을 고르세요`, {
+      .text(width / 2, height * 0.085, `보유한 유닛 중 ${DECK_SIZE}종을 고르세요 · 골드 ${loadGold()}`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(12)}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5);
 
-    const gachaButton = this.add
-      .text(width - px(12), height * 0.045, '뽑기', {
+    const boxButton = this.add
+      .text(width - px(12), height * 0.045, `상자 (${totalBoxes})`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(13)}px`,
         color: '#ffd98a',
@@ -90,8 +95,8 @@ export class DeckSelectScene extends Phaser.Scene {
       })
       .setOrigin(1, 0.5)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.drawGacha());
-    gachaButton.setPadding(px(8), px(8), px(8), px(8));
+      .on('pointerdown', () => this.scene.start('box'));
+    boxButton.setPadding(px(8), px(8), px(8), px(8));
 
     const devButton = this.add
       .text(px(12), height * 0.045, '[개발자] 전체 획득', {
@@ -199,35 +204,6 @@ export class DeckSelectScene extends Phaser.Scene {
 
     this.cardRefs.set(unit.id, { ring });
     this.updateCardVisual(unit.id);
-  }
-
-  private drawGacha(): void {
-    const drawn = pickRandomUnit(OBTAINABLE_UNITS);
-    const collection = addToCollection(drawn.id);
-    this.rebuildOwnedCounts(collection);
-    this.layout();
-
-    const { width, height } = this.scale;
-    const isNew = (this.ownedCounts.get(drawn.id) ?? 0) === 1;
-    const message = isNew ? `새 유닛 획득! ${drawn.name}` : `${drawn.name} 획득 (중복)`;
-
-    const popup = this.add
-      .text(width / 2, height * 0.19, message, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(14)}px`,
-        color: '#ffe9b0',
-      })
-      .setOrigin(0.5)
-      .setDepth(500);
-
-    this.tweens.add({
-      targets: popup,
-      y: popup.y - px(24),
-      alpha: 0,
-      duration: 1300,
-      delay: 400,
-      onComplete: () => popup.destroy(),
-    });
   }
 
   private devUnlockAll(): void {

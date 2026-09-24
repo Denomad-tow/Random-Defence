@@ -2,6 +2,7 @@ import './style.css';
 import Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
 import { DeckSelectScene } from './scenes/DeckSelectScene';
+import { BoxScene } from './scenes/BoxScene';
 import { DPR } from './core/dpr';
 
 function startGame(): void {
@@ -12,7 +13,7 @@ function startGame(): void {
     type: Phaser.AUTO,
     parent: 'app',
     backgroundColor: '#07080d',
-    scene: [DeckSelectScene, GameScene],
+    scene: [DeckSelectScene, GameScene, BoxScene],
     scale: {
       mode: Phaser.Scale.NONE,
       zoom: 1 / DPR,

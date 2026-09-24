@@ -29,6 +29,10 @@ import {
 } from '../core/economy';
 import { enhanceCost, canEnhance, statMultiplier, MAX_ENHANCE_LEVEL } from '../core/enhancement';
 import { loadBestStage, saveBestStage } from '../meta/progress';
+import { addGold } from '../meta/gold';
+import { addBox } from '../meta/boxes';
+import { getBoxType } from '../meta/gacha';
+import { computeRunReward, type RunReward } from '../meta/rewards';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -73,6 +77,7 @@ export class GameScene extends Phaser.Scene {
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
   private gameOver = false;
   private bestStage = 0;
+  private lastReward?: RunReward;
   private pendingSummon?: PlacedUnit;
   private pendingSummonPreEconomy?: EconomyState;
   private placementHighlights: Phaser.GameObjects.Arc[] = [];
@@ -99,6 +104,7 @@ export class GameScene extends Phaser.Scene {
     this.placedUnits = new Map();
     this.enhanceLevels = new Map();
     this.gameOver = false;
+    this.lastReward = undefined;
     this.bestStage = loadBestStage();
     this.pendingSummon = undefined;
     this.pendingSummonPreEconomy = undefined;
@@ -153,16 +159,22 @@ export class GameScene extends Phaser.Scene {
     this.firstSpawnTimer?.remove();
     if (this.spawnTimer) this.spawnTimer.paused = true;
     this.bestStage = saveBestStage(this.waveState.stage);
-    this.showGameOverOverlay();
+
+    const reward = computeRunReward(this.waveState.stage);
+    addGold(reward.gold);
+    addBox(reward.boxId);
+    this.lastReward = reward;
+
+    this.showGameOverOverlay(reward);
   }
 
-  private showGameOverOverlay(): void {
+  private showGameOverOverlay(reward: RunReward | undefined = this.lastReward): void {
     const { width, height } = this.scale;
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(1000);
 
     this.add
-      .text(width / 2, height * 0.38, '패배', {
+      .text(width / 2, height * 0.32, '패배', {
         fontFamily: TITLE_FONT,
         fontSize: `${px(36)}px`,
         color: '#ff6b6b',
@@ -172,7 +184,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(1001);
 
     this.add
-      .text(width / 2, height * 0.46, `도달 스테이지 ${this.waveState.stage} · 최고 기록 ${this.bestStage}`, {
+      .text(width / 2, height * 0.4, `도달 스테이지 ${this.waveState.stage} · 최고 기록 ${this.bestStage}`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(14)}px`,
         color: '#f6e6b4',
@@ -180,18 +192,47 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(1001);
 
+    if (reward) {
+      const boxName = getBoxType(reward.boxId).name;
+      this.add
+        .text(width / 2, height * 0.46, `보상: 골드 +${reward.gold} · ${boxName} +1`, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(13)}px`,
+          color: '#ffd98a',
+        })
+        .setOrigin(0.5)
+        .setDepth(1001);
+    }
+
     const buttonWidth = Math.min(this.cellSize * 3.4, width * 0.6);
     const buttonHeight = this.cellSize * 0.9;
-    const buttonY = height * 0.56;
+    const restartY = height * 0.58;
+    const deckY = restartY + buttonHeight * 1.3;
 
+    this.drawOverlayButton(width / 2, restartY, buttonWidth, buttonHeight, '다시 시작', () =>
+      this.scene.restart({ deck: this.deckUnitIds }),
+    );
+    this.drawOverlayButton(width / 2, deckY, buttonWidth, buttonHeight, '컬렉션 / 상자', () =>
+      this.scene.start('deck-select', { forceEdit: true }),
+    );
+  }
+
+  private drawOverlayButton(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    label: string,
+    onClick: () => void,
+  ): void {
     const bg = this.add.graphics().setDepth(1001);
     bg.fillStyle(0x151a28, 1);
-    bg.fillRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(10));
+    bg.fillRoundedRect(x - width / 2, y - height / 2, width, height, px(10));
     bg.lineStyle(px(2), 0xd4b36a, 1);
-    bg.strokeRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(10));
+    bg.strokeRoundedRect(x - width / 2, y - height / 2, width, height, px(10));
 
     this.add
-      .text(width / 2, buttonY, '다시 시작', {
+      .text(x, y, label, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(16)}px`,
         color: '#f6e6b4',
@@ -201,10 +242,10 @@ export class GameScene extends Phaser.Scene {
       .setDepth(1001);
 
     this.add
-      .zone(width / 2, buttonY, buttonWidth, buttonHeight)
+      .zone(x, y, width, height)
       .setInteractive({ useHandCursor: true })
       .setDepth(1001)
-      .on('pointerdown', () => this.scene.restart({ deck: this.deckUnitIds }));
+      .on('pointerdown', onClick);
   }
 
   private updateMonsters(dt: number): void {

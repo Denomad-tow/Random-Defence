@@ -139,7 +139,7 @@ export class CollectionScene extends Phaser.Scene {
     const nameText = this.add
       .text(textCx, nameTop, unit.name, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(nameFontSize)}px`,
+        fontSize: `${nameFontSize}px`,
         color: '#f0e9d8',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -153,7 +153,7 @@ export class CollectionScene extends Phaser.Scene {
     const traitText = this.add
       .text(textCx, traitTop, ROLE_DESCRIPTIONS[unit.role] ?? '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(costFontSize)}px`,
+        fontSize: `${costFontSize}px`,
         color: '#9fd8ff',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -164,7 +164,7 @@ export class CollectionScene extends Phaser.Scene {
     this.add
       .text(textCx, subTop, `Lv.${level} · ${count}개`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(costFontSize)}px`,
+        fontSize: `${costFontSize}px`,
         color: '#9a917d',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -190,7 +190,7 @@ export class CollectionScene extends Phaser.Scene {
       this.add
         .text(x, y, 'MAX', {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(labelFontSize)}px`,
+          fontSize: `${labelFontSize}px`,
           color: '#6a6458',
         })
         .setOrigin(0.5);
@@ -211,7 +211,7 @@ export class CollectionScene extends Phaser.Scene {
     this.add
       .text(x, y - buttonHeight * 0.18, '레벨업', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(labelFontSize)}px`,
+        fontSize: `${labelFontSize}px`,
         color: canAfford ? '#ffd98a' : '#8a8272',
         fontStyle: 'bold',
       })
@@ -220,7 +220,7 @@ export class CollectionScene extends Phaser.Scene {
     this.add
       .text(x, y + buttonHeight * 0.3, `중복${cost.duplicates}·골드${cost.gold}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(costFontSize)}px`,
+        fontSize: `${costFontSize}px`,
         color: '#8a8272',
       })
       .setOrigin(0.5);

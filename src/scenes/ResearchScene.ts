@@ -114,7 +114,7 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(labelX, y - cardH * 0.28, getGeneralLabel(key), {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(labelFontSize)}px`,
+        fontSize: `${labelFontSize}px`,
         color: '#f0e9d8',
       })
       .setOrigin(0, 0.5);
@@ -122,7 +122,7 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(labelX, y + cardH * 0.2, `Lv.${level}/${MAX_RESEARCH_LEVEL}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(costFontSize)}px`,
+        fontSize: `${costFontSize}px`,
         color: '#9a917d',
       })
       .setOrigin(0, 0.5);
@@ -177,7 +177,7 @@ export class ResearchScene extends Phaser.Scene {
     const nameText = this.add
       .text(textCx, nameTop, sigil?.label ?? role, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(labelFontSize)}px`,
+        fontSize: `${labelFontSize}px`,
         color: '#f0e9d8',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -188,7 +188,7 @@ export class ResearchScene extends Phaser.Scene {
     const descText = this.add
       .text(textCx, descTop, ROLE_DESCRIPTIONS[role] ?? '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(costFontSize)}px`,
+        fontSize: `${costFontSize}px`,
         color: '#9fd8ff',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -199,7 +199,7 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(textCx, subTop, `Lv.${level}/${MAX_RESEARCH_LEVEL}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(costFontSize)}px`,
+        fontSize: `${costFontSize}px`,
         color: '#9a917d',
       })
       .setOrigin(0.5, 0);
@@ -231,7 +231,7 @@ export class ResearchScene extends Phaser.Scene {
       this.add
         .text(x, y, 'MAX', {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(labelFontSize)}px`,
+          fontSize: `${labelFontSize}px`,
           color: '#6a6458',
         })
         .setOrigin(0.5);
@@ -250,7 +250,7 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(x, y - buttonHeight * 0.18, '연구', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(labelFontSize)}px`,
+        fontSize: `${labelFontSize}px`,
         color: canAfford ? '#ffd98a' : '#8a8272',
         fontStyle: 'bold',
       })
@@ -259,7 +259,7 @@ export class ResearchScene extends Phaser.Scene {
     this.add
       .text(x, y + buttonHeight * 0.3, `골드${cost}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(costFontSize)}px`,
+        fontSize: `${costFontSize}px`,
         color: '#8a8272',
       })
       .setOrigin(0.5);

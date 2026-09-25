@@ -315,7 +315,7 @@ export class DeckSelectScene extends Phaser.Scene {
     this.add
       .text(x, y + size * 0.62, nameLabel, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(labelFontSize)}px`,
+        fontSize: `${labelFontSize}px`,
         color: '#c9c2af',
         align: 'center',
         wordWrap: { width: size * 1.2 },
@@ -424,7 +424,7 @@ export class DeckSelectScene extends Phaser.Scene {
     this.add
       .text(x, y, label, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(fontSize)}px`,
+        fontSize: `${fontSize}px`,
         color,
         fontStyle: 'bold',
       })

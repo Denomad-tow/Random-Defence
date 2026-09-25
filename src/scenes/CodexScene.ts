@@ -148,7 +148,7 @@ export class CodexScene extends Phaser.Scene {
     const nameText = this.add
       .text(textCx, 0, `${sigil?.label ?? unit.role}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(centerFontSize)}px`,
+        fontSize: `${centerFontSize}px`,
         color: '#f0e9d8',
         fontStyle: 'bold',
         align: 'center',
@@ -159,7 +159,7 @@ export class CodexScene extends Phaser.Scene {
     const categoryText = this.add
       .text(textCx, 0, category, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(centerFontSize)}px`,
+        fontSize: `${centerFontSize}px`,
         color: categoryColor,
         fontStyle: 'bold',
       })
@@ -168,7 +168,7 @@ export class CodexScene extends Phaser.Scene {
     const descText = this.add
       .text(textCx, 0, ROLE_DESCRIPTIONS[unit.role] ?? '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(centerFontSize)}px`,
+        fontSize: `${centerFontSize}px`,
         color: '#9fd8ff',
         align: 'center',
         wordWrap: { width: textWrapWidth },
@@ -195,7 +195,7 @@ export class CodexScene extends Phaser.Scene {
 
     const probe = this.add.text(0, 0, '측정용', {
       fontFamily: TITLE_FONT,
-      fontSize: `${px(statFontSize)}px`,
+      fontSize: `${statFontSize}px`,
     });
     const statLineHeight = probe.height;
     probe.destroy();
@@ -207,7 +207,7 @@ export class CodexScene extends Phaser.Scene {
       this.add
         .text(statsCx, statY, `${stat.label} ${stat.value}`, {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(statFontSize)}px`,
+          fontSize: `${statFontSize}px`,
           color: '#ffd98a',
           align: 'center',
         })

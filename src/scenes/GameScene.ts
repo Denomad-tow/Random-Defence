@@ -91,6 +91,7 @@ export class GameScene extends Phaser.Scene {
   private deckUnitIds: string[] = NORMAL_UNITS.map((u) => u.id);
   private showRange = false;
   private rangeGraphics?: Phaser.GameObjects.Graphics;
+  private statusGraphics?: Phaser.GameObjects.Graphics;
   private rangeToggleText?: Phaser.GameObjects.Text;
   private confirmModalContainer?: Phaser.GameObjects.Container;
   private tutorialContainer?: Phaser.GameObjects.Container;
@@ -309,6 +310,35 @@ export class GameScene extends Phaser.Scene {
 
       const point = this.monsterPath.getPoint(t);
       monster.setPosition(point.x, point.y);
+    });
+
+    this.drawStatusMarks();
+  }
+
+  // 감속·기절·독·방어 감소에 걸린 몬스터 주위에 색깔 링을 그려서, 효과가 실제로
+  // 적용되고 있는지 눈으로 볼 수 있게 한다(파랑=감속, 노랑=기절, 초록=독, 빨강=방어 감소).
+  private drawStatusMarks(): void {
+    if (!this.statusGraphics || !this.statusGraphics.active) {
+      this.statusGraphics = this.add.graphics().setDepth(2);
+    }
+    const g = this.statusGraphics;
+    g.clear();
+
+    this.monsters.forEach((monster) => {
+      if (!monster.active) return;
+      const status = monster.getData('status') as StatusEffects | undefined;
+      if (!status) return;
+
+      let ring = 0;
+      const draw = (color: number): void => {
+        g.lineStyle(px(2.5), color, 0.95);
+        g.strokeCircle(monster.x, monster.y, this.cellSize * 0.32 + ring * px(4));
+        ring += 1;
+      };
+      if (status.stunRemaining !== undefined) draw(0xffe14d);
+      if (status.slowFactor !== undefined) draw(0x4fb4ff);
+      if (status.poisonRemaining !== undefined) draw(0x7be07b);
+      if (status.armorBreakRemaining !== undefined) draw(0xff6b6b);
     });
   }
 

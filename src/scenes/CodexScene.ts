@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
-import { NORMAL_UNITS, ROLE_DESCRIPTIONS, ROLE_CATEGORIES, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, ROLE_CATEGORIES, type UnitDef } from '../core/units';
+import { shortSummary } from '../core/unitDescription';
+import { showUnitInfoModal } from '../core/unitInfoModal';
 import { RARITIES, getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
-import { px } from '../core/dpr';
+import { px, capPx } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const COLS = 3;
@@ -58,6 +60,14 @@ export class CodexScene extends Phaser.Scene {
       .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
 
     this.drawRarityTabs(width, height * 0.11);
+
+    this.add
+      .text(width / 2, height * 0.145, '카드를 탭하면 자세한 설명이 나와요', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#8a8272',
+      })
+      .setOrigin(0.5);
 
     const gridTop = height * 0.17;
     const rows = Math.ceil(15 / COLS);
@@ -135,7 +145,7 @@ export class CodexScene extends Phaser.Scene {
 
     // 중앙 이름·분류·특성 글씨 크기는 컬렉션 화면의 특성 설명 글씨 크기와 동일하게 맞춘다.
     const collectionButtonWidth = cardW * 0.34 * 0.88;
-    const centerFontSize = Math.max(8, Math.round(collectionButtonWidth * 0.1)) * 2;
+    const centerFontSize = capPx(Math.max(8, Math.round(collectionButtonWidth * 0.1)) * 2, 15);
     const textCx = cardX + iconAreaWidth + textAreaWidth / 2;
     const textWrapWidth = textAreaWidth - cardW * 0.03;
     const centerLineGap = cardH * 0.015;
@@ -166,7 +176,7 @@ export class CodexScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     const descText = this.add
-      .text(textCx, 0, ROLE_DESCRIPTIONS[unit.role] ?? '', {
+      .text(textCx, 0, shortSummary(unit), {
         fontFamily: TITLE_FONT,
         fontSize: `${centerFontSize}px`,
         color: '#9fd8ff',
@@ -190,7 +200,7 @@ export class CodexScene extends Phaser.Scene {
       { label: '속도', value: `${unit.attackSpeed}` },
       { label: '사거리', value: `${unit.range}` },
     ];
-    const statFontSize = Math.max(7, Math.round(cardW * 0.035)) * 2;
+    const statFontSize = capPx(Math.max(7, Math.round(cardW * 0.035)) * 2, 15);
     const statGap = cardH * 0.03;
 
     const probe = this.add.text(0, 0, '측정용', {
@@ -214,5 +224,10 @@ export class CodexScene extends Phaser.Scene {
         .setOrigin(0.5);
       statY += statLineHeight + statGap;
     });
+
+    this.add
+      .zone(cardX + cardW / 2, cardTop + cardH / 2, cardW, cardH)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => showUnitInfoModal(this, unit));
   }
 }

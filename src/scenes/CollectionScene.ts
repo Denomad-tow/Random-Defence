@@ -7,7 +7,7 @@ import { loadCollection, consumeDuplicates } from '../meta/collection';
 import { loadGold, spendGold } from '../meta/gold';
 import { getUnitLevel, setUnitLevel, levelUpCost, availableDuplicates, MAX_UNIT_LEVEL } from '../meta/levels';
 import { sortByRarityThenLevel } from '../meta/unitSort';
-import { px } from '../core/dpr';
+import { px, capPx } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const ROWS_PER_PAGE = 5;
@@ -120,10 +120,10 @@ export class CollectionScene extends Phaser.Scene {
 
     // 레벨업 버튼 글씨는 버튼 크기 기준 그대로 두고, 이름/특성/레벨 설명
     // 글씨는 도감 화면과 동일하게 2배 확대해 가독성을 높인다.
-    const labelFontSize = Math.max(9, Math.round(buttonWidth * 0.13));
-    const costFontSize = Math.max(8, Math.round(buttonWidth * 0.1));
-    const nameFontSize = labelFontSize * 2;
-    const traitFontSize = costFontSize * 2;
+    const labelFontSize = capPx(Math.max(9, Math.round(buttonWidth * 0.13)), 12);
+    const costFontSize = capPx(Math.max(8, Math.round(buttonWidth * 0.1)), 10);
+    const nameFontSize = capPx(labelFontSize * 2, 15);
+    const traitFontSize = capPx(costFontSize * 2, 13);
 
     const iconSize = Math.min(iconAreaWidth * 0.85, cardH * 0.78);
     const iconX = cardX + iconAreaWidth / 2;

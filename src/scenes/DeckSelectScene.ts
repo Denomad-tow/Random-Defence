@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, ROLE_DESCRIPTIONS, ROLE_CATEGORIES, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, type UnitDef } from '../core/units';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
@@ -14,10 +14,11 @@ import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { showBugReportOverlay } from '../core/bugReportOverlay';
 import { showChangePasswordOverlay } from '../core/changePasswordOverlay';
 import { mountGlobalChat } from '../core/globalChatOverlay';
+import { showUnitInfoModal } from '../core/unitInfoModal';
 import { canClaimAttendanceToday, currentAttendanceDay, claimAttendance } from '../meta/attendance';
 import { ATTENDANCE_REWARDS } from '../core/attendanceBalance';
 import { getBoxType } from '../meta/gacha';
-import { px } from '../core/dpr';
+import { px, capPx } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const DOUBLE_TAP_WINDOW_MS = 320;
@@ -32,7 +33,6 @@ export class DeckSelectScene extends Phaser.Scene {
   private cardRefs = new Map<string, CardRef>();
   private countText!: Phaser.GameObjects.Text;
   private startButtonText!: Phaser.GameObjects.Text;
-  private forceEdit = false;
   private activeSlot = 0;
   private page = 0;
   private nickname = '';
@@ -46,10 +46,6 @@ export class DeckSelectScene extends Phaser.Scene {
     super('deck-select');
   }
 
-  init(data: { forceEdit?: boolean }): void {
-    this.forceEdit = !!data?.forceEdit;
-  }
-
   create(): void {
     this.page = 0;
     const collection = ensureStarterCollection(OBTAINABLE_UNITS);
@@ -58,11 +54,6 @@ export class DeckSelectScene extends Phaser.Scene {
     this.activeSlot = loadActiveSlot();
     const saved = loadDeckSlot(this.activeSlot);
     const validSaved = saved?.filter((id) => this.ownedCounts.has(id)) ?? [];
-
-    if (!this.forceEdit && validSaved.length === DECK_SIZE) {
-      this.scene.start('game', { deck: validSaved });
-      return;
-    }
 
     this.selected = new Set(validSaved.slice(0, DECK_SIZE));
 
@@ -243,7 +234,7 @@ export class DeckSelectScene extends Phaser.Scene {
     const gridTop = height * 0.37;
     const rowsFactor = rowSpacingFactor * (rowsPerPage - 1) + lastRowExtra;
     const cardSizeByWidth = width / (cols + 1.4);
-    const cardSizeByHeight = (height * 0.5) / rowsFactor;
+    const cardSizeByHeight = (height * 0.4) / rowsFactor;
     const cardSize = Math.min(cardSizeByWidth, cardSizeByHeight);
     const itemsPerPage = rowsPerPage * cols;
 
@@ -379,7 +370,7 @@ export class DeckSelectScene extends Phaser.Scene {
 
     const count = this.ownedCounts.get(unit.id) ?? 1;
     const nameLabel = count > 1 ? `${unit.name} ×${count}` : unit.name;
-    const labelFontSize = Math.max(8, Math.round(size * 0.19));
+    const labelFontSize = capPx(Math.max(8, Math.round(size * 0.19)), 13);
     this.add
       .text(x, y + size * 0.62, nameLabel, {
         fontFamily: TITLE_FONT,
@@ -605,131 +596,7 @@ export class DeckSelectScene extends Phaser.Scene {
   }
 
   private showUnitInfoModal(unit: UnitDef): void {
-    const { width, height } = this.scale;
-
-    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(700).setInteractive();
-
-    const panelWidth = width * 0.82;
-    const panelHeight = height * 0.55;
-    const panelX = width / 2;
-    const panelY = height / 2;
-
-    const rarity = getRarity(unit.rarity);
-    const sigil = ROLE_SIGILS[unit.role];
-    const rarityColor = Phaser.Display.Color.HexStringToColor(rarity.c1).color;
-
-    const panel = this.add.graphics().setDepth(701);
-    panel.fillStyle(0x151a28, 0.98);
-    panel.fillRoundedRect(panelX - panelWidth / 2, panelY - panelHeight / 2, panelWidth, panelHeight, px(14));
-    panel.lineStyle(px(2.5), rarityColor, 1);
-    panel.strokeRoundedRect(panelX - panelWidth / 2, panelY - panelHeight / 2, panelWidth, panelHeight, px(14));
-
-    this.add
-      .text(panelX + panelWidth / 2 - px(22), panelY - panelHeight / 2 + px(20), '✕', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(18)}px`,
-        color: '#9a917d',
-      })
-      .setOrigin(0.5)
-      .setDepth(703)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.layout());
-
-    const iconSize = panelWidth * 0.26;
-    const iconY = panelY - panelHeight * 0.36;
-    const key = `unitinfo-${unit.id}-${Math.round(iconSize)}`;
-    createGemTexture(this, key, rarity, sigil, 1, Math.round(iconSize));
-    this.add.image(panelX, iconY, key).setDisplaySize(iconSize, iconSize).setDepth(702);
-
-    const category = ROLE_CATEGORIES[unit.role] ?? '';
-    const description = ROLE_DESCRIPTIONS[unit.role] ?? '';
-    const textWrapWidth = panelWidth * 0.82;
-
-    const nameText = this.add
-      .text(panelX, 0, unit.name, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(18)}px`,
-        color: '#f6e6b4',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5, 0);
-
-    const rarityText = this.add
-      .text(panelX, 0, rarity.label, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
-        color: rarity.c1,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5, 0);
-
-    const categoryText = this.add
-      .text(panelX, 0, category, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color: '#9fd8ff',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5, 0);
-
-    const descText = this.add
-      .text(panelX, 0, description, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color: '#c9c2af',
-        align: 'center',
-        wordWrap: { width: textWrapWidth },
-      })
-      .setOrigin(0.5, 0);
-
-    const statsText = this.add
-      .text(panelX, 0, `공격 ${unit.attack}  ·  속도 ${unit.attackSpeed}  ·  사거리 ${unit.range}`, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color: '#ffd98a',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5, 0);
-
-    const lineGap = panelHeight * 0.03;
-    let cursorY = iconY + iconSize / 2 + panelHeight * 0.07;
-    nameText.setY(cursorY);
-    cursorY += nameText.height + lineGap;
-    rarityText.setY(cursorY);
-    cursorY += rarityText.height + lineGap;
-    categoryText.setY(cursorY);
-    cursorY += categoryText.height + lineGap;
-    descText.setY(cursorY);
-    cursorY += descText.height + lineGap * 1.5;
-    statsText.setY(cursorY);
-
-    [nameText, rarityText, categoryText, descText, statsText].forEach((t) => t.setDepth(702));
-
-    const closeBtnWidth = panelWidth * 0.5;
-    const closeBtnHeight = panelHeight * 0.11;
-    const closeBtnY = panelY + panelHeight / 2 - panelHeight * 0.1;
-
-    const closeBg = this.add.graphics().setDepth(701);
-    closeBg.fillStyle(0x1f2536, 1);
-    closeBg.fillRoundedRect(panelX - closeBtnWidth / 2, closeBtnY - closeBtnHeight / 2, closeBtnWidth, closeBtnHeight, px(10));
-    closeBg.lineStyle(px(2), 0xd4b36a, 1);
-    closeBg.strokeRoundedRect(panelX - closeBtnWidth / 2, closeBtnY - closeBtnHeight / 2, closeBtnWidth, closeBtnHeight, px(10));
-
-    this.add
-      .text(panelX, closeBtnY, '닫기', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(15)}px`,
-        color: '#ffd98a',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5)
-      .setDepth(702);
-
-    this.add
-      .zone(panelX, closeBtnY, closeBtnWidth, closeBtnHeight)
-      .setDepth(703)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.layout());
+    showUnitInfoModal(this, unit);
   }
 
   private showAttendanceModal(): void {
@@ -738,8 +605,10 @@ export class DeckSelectScene extends Phaser.Scene {
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(600).setInteractive();
 
-    const panelWidth = width * 0.86;
-    const panelHeight = height * 0.46;
+    // PC처럼 넓은 화면에서는 팝업이 화면 폭만큼 늘어나지 않도록 폭에 상한을 두고,
+    // 높이는 폭에 맞춰(칸이 커진 만큼) 같이 키운다.
+    const panelWidth = Math.min(width * 0.86, px(460));
+    const panelHeight = Math.min(height * 0.92, Math.max(height * 0.46, panelWidth * 1.16));
     const panelX = width / 2;
     const panelY = height / 2;
 

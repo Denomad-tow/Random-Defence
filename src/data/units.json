@@ -4,9 +4,9 @@
     "name": "창술 견습생",
     "rarity": "normal",
     "role": "single",
-    "attack": 18,
-    "attackSpeed": 0.9,
-    "range": 2,
+    "attack": 21,
+    "attackSpeed": 0.7,
+    "range": 3,
     "effects": []
   },
   {
@@ -14,8 +14,8 @@
     "name": "화염 견습생",
     "rarity": "normal",
     "role": "aoe",
-    "attack": 8,
-    "attackSpeed": 1.0,
+    "attack": 10,
+    "attackSpeed": 0.8,
     "range": 2,
     "effects": [{ "type": "aoe", "radius": 1 }]
   },
@@ -24,28 +24,28 @@
     "name": "서리 견습생",
     "rarity": "normal",
     "role": "slow",
-    "attack": 10,
-    "attackSpeed": 1.0,
+    "attack": 8,
+    "attackSpeed": 1.3,
     "range": 2,
-    "effects": [{ "type": "slow", "value": 0.2, "duration": 1.5 }]
+    "effects": [{ "type": "slow", "value": 0.25, "duration": 1.5 }]
   },
   {
     "id": "stun_normal",
     "name": "벼락 견습생",
     "rarity": "normal",
     "role": "stun",
-    "attack": 9,
-    "attackSpeed": 0.8,
+    "attack": 7,
+    "attackSpeed": 1.2,
     "range": 1,
-    "effects": [{ "type": "stun", "chance": 0.15, "duration": 1.0 }]
+    "effects": [{ "type": "stun", "chance": 0.15, "duration": 1 }]
   },
   {
     "id": "poison_normal",
     "name": "맹독 견습생",
     "rarity": "normal",
     "role": "poison",
-    "attack": 6,
-    "attackSpeed": 1.0,
+    "attack": 4,
+    "attackSpeed": 1.5,
     "range": 2,
     "effects": [{ "type": "poison", "value": 4, "duration": 3 }]
   },
@@ -54,9 +54,9 @@
     "name": "파쇄 견습생",
     "rarity": "normal",
     "role": "armorBreak",
-    "attack": 9,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 7,
+    "attackSpeed": 1.1,
+    "range": 3,
     "effects": [{ "type": "armorBreak", "value": 0.15, "duration": 2 }]
   },
   {
@@ -84,9 +84,9 @@
     "name": "철검 용병",
     "rarity": "uncommon",
     "role": "single",
-    "attack": 24,
-    "attackSpeed": 0.95,
-    "range": 2,
+    "attack": 29,
+    "attackSpeed": 0.72,
+    "range": 3,
     "effects": []
   },
   {
@@ -94,8 +94,8 @@
     "name": "폭염 주술사",
     "rarity": "uncommon",
     "role": "aoe",
-    "attack": 11,
-    "attackSpeed": 1.0,
+    "attack": 13,
+    "attackSpeed": 0.82,
     "range": 2,
     "effects": [{ "type": "aoe", "radius": 1.2 }]
   },
@@ -104,18 +104,18 @@
     "name": "빙결 술사",
     "rarity": "uncommon",
     "role": "slow",
-    "attack": 13,
-    "attackSpeed": 1.0,
+    "attack": 10,
+    "attackSpeed": 1.34,
     "range": 2,
-    "effects": [{ "type": "slow", "value": 0.3, "duration": 1.7 }]
+    "effects": [{ "type": "slow", "value": 0.32, "duration": 1.7 }]
   },
   {
     "id": "stun_uncommon",
     "name": "충격 용병",
     "rarity": "uncommon",
     "role": "stun",
-    "attack": 12,
-    "attackSpeed": 0.85,
+    "attack": 10,
+    "attackSpeed": 1.24,
     "range": 1,
     "effects": [{ "type": "stun", "chance": 0.22, "duration": 1.1 }]
   },
@@ -124,8 +124,8 @@
     "name": "역병 주술사",
     "rarity": "uncommon",
     "role": "poison",
-    "attack": 8,
-    "attackSpeed": 1.0,
+    "attack": 5,
+    "attackSpeed": 1.55,
     "range": 2,
     "effects": [{ "type": "poison", "value": 6, "duration": 3.2 }]
   },
@@ -134,9 +134,9 @@
     "name": "파쇄 전사",
     "rarity": "uncommon",
     "role": "armorBreak",
-    "attack": 12,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 10,
+    "attackSpeed": 1.13,
+    "range": 3,
     "effects": [{ "type": "armorBreak", "value": 0.22, "duration": 2.2 }]
   },
   {
@@ -164,9 +164,9 @@
     "name": "창끝 견습생",
     "rarity": "normal",
     "role": "pierce",
-    "attack": 14,
+    "attack": 13,
     "attackSpeed": 0.9,
-    "range": 2,
+    "range": 3,
     "effects": [{ "type": "pierce" }]
   },
   {
@@ -174,8 +174,8 @@
     "name": "쌍시위 견습생",
     "rarity": "normal",
     "role": "multishot",
-    "attack": 7,
-    "attackSpeed": 0.9,
+    "attack": 6,
+    "attackSpeed": 1,
     "range": 2,
     "effects": [{ "type": "multishot" }]
   },
@@ -184,8 +184,8 @@
     "name": "전기 견습생",
     "rarity": "normal",
     "role": "chain",
-    "attack": 8,
-    "attackSpeed": 1.0,
+    "attack": 7,
+    "attackSpeed": 1.2,
     "range": 2,
     "effects": [{ "type": "chain" }]
   },
@@ -194,8 +194,8 @@
     "name": "암살 견습생",
     "rarity": "normal",
     "role": "execute",
-    "attack": 12,
-    "attackSpeed": 0.85,
+    "attack": 20,
+    "attackSpeed": 0.6,
     "range": 1,
     "effects": [{ "type": "execute" }]
   },
@@ -204,8 +204,8 @@
     "name": "마나포식 견습생",
     "rarity": "normal",
     "role": "manaLeech",
-    "attack": 7,
-    "attackSpeed": 1.0,
+    "attack": 4,
+    "attackSpeed": 1.6,
     "range": 2,
     "effects": [{ "type": "manaLeech", "chance": 0.3, "value": 2 }]
   },
@@ -225,8 +225,8 @@
     "rarity": "normal",
     "role": "critStrike",
     "attack": 10,
-    "attackSpeed": 0.8,
-    "range": 2,
+    "attackSpeed": 0.75,
+    "range": 3,
     "effects": [{ "type": "critStrike", "chance": 0.2, "multiplier": 3 }]
   },
   {
@@ -234,9 +234,9 @@
     "name": "창검 용병",
     "rarity": "uncommon",
     "role": "pierce",
-    "attack": 18,
-    "attackSpeed": 0.95,
-    "range": 2,
+    "attack": 17,
+    "attackSpeed": 0.93,
+    "range": 3,
     "effects": [{ "type": "pierce" }]
   },
   {
@@ -244,8 +244,8 @@
     "name": "쌍시위 용병",
     "rarity": "uncommon",
     "role": "multishot",
-    "attack": 9,
-    "attackSpeed": 0.95,
+    "attack": 8,
+    "attackSpeed": 1.03,
     "range": 2,
     "effects": [{ "type": "multishot" }]
   },
@@ -254,8 +254,8 @@
     "name": "감전 주술사",
     "rarity": "uncommon",
     "role": "chain",
-    "attack": 10,
-    "attackSpeed": 1.0,
+    "attack": 8,
+    "attackSpeed": 1.24,
     "range": 2,
     "effects": [{ "type": "chain" }]
   },
@@ -264,8 +264,8 @@
     "name": "암살 용병",
     "rarity": "uncommon",
     "role": "execute",
-    "attack": 15,
-    "attackSpeed": 0.9,
+    "attack": 26,
+    "attackSpeed": 0.62,
     "range": 1,
     "effects": [{ "type": "execute" }]
   },
@@ -274,8 +274,8 @@
     "name": "마나포식 주술사",
     "rarity": "uncommon",
     "role": "manaLeech",
-    "attack": 9,
-    "attackSpeed": 1.0,
+    "attack": 5,
+    "attackSpeed": 1.65,
     "range": 2,
     "effects": [{ "type": "manaLeech", "chance": 0.35, "value": 3 }]
   },
@@ -295,8 +295,8 @@
     "rarity": "uncommon",
     "role": "critStrike",
     "attack": 13,
-    "attackSpeed": 0.85,
-    "range": 2,
+    "attackSpeed": 0.77,
+    "range": 3,
     "effects": [{ "type": "critStrike", "chance": 0.25, "multiplier": 3 }]
   },
   {
@@ -304,9 +304,9 @@
     "name": "강철 검사",
     "rarity": "rare",
     "role": "single",
-    "attack": 31,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 38,
+    "attackSpeed": 0.74,
+    "range": 3,
     "effects": []
   },
   {
@@ -314,8 +314,8 @@
     "name": "폭염 대주술사",
     "rarity": "rare",
     "role": "aoe",
-    "attack": 14,
-    "attackSpeed": 1.0,
+    "attack": 16,
+    "attackSpeed": 0.85,
     "range": 2,
     "effects": [{ "type": "aoe", "radius": 1.5 }]
   },
@@ -324,18 +324,18 @@
     "name": "빙결 대마법사",
     "rarity": "rare",
     "role": "slow",
-    "attack": 17,
-    "attackSpeed": 1.0,
+    "attack": 12,
+    "attackSpeed": 1.38,
     "range": 2,
-    "effects": [{ "type": "slow", "value": 0.3, "duration": 1.7, "targets": 2 }]
+    "effects": [{ "type": "slow", "value": 0.38, "duration": 1.7, "targets": 2 }]
   },
   {
     "id": "stun_rare",
     "name": "충격 대전사",
     "rarity": "rare",
     "role": "stun",
-    "attack": 15,
-    "attackSpeed": 0.9,
+    "attack": 13,
+    "attackSpeed": 1.27,
     "range": 1,
     "effects": [{ "type": "stun", "chance": 0.3, "duration": 1.2, "targets": 2 }]
   },
@@ -344,8 +344,8 @@
     "name": "역병 대주술사",
     "rarity": "rare",
     "role": "poison",
-    "attack": 10,
-    "attackSpeed": 1.0,
+    "attack": 6,
+    "attackSpeed": 1.59,
     "range": 2,
     "effects": [{ "type": "poison", "value": 8, "duration": 3.5, "targets": 2 }]
   },
@@ -354,9 +354,9 @@
     "name": "파쇄 대전사",
     "rarity": "rare",
     "role": "armorBreak",
-    "attack": 15,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 12,
+    "attackSpeed": 1.17,
+    "range": 3,
     "effects": [{ "type": "armorBreak", "value": 0.3, "duration": 2.5, "targets": 2 }]
   },
   {
@@ -384,9 +384,9 @@
     "name": "장창 용병",
     "rarity": "rare",
     "role": "pierce",
-    "attack": 24,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 23,
+    "attackSpeed": 0.95,
+    "range": 3,
     "effects": [{ "type": "pierce", "bandWidth": 0.8 }]
   },
   {
@@ -394,8 +394,8 @@
     "name": "삼시위 용병",
     "rarity": "rare",
     "role": "multishot",
-    "attack": 12,
-    "attackSpeed": 1.0,
+    "attack": 11,
+    "attackSpeed": 1.06,
     "range": 2,
     "effects": [{ "type": "multishot", "count": 3 }]
   },
@@ -404,8 +404,8 @@
     "name": "감전 대주술사",
     "rarity": "rare",
     "role": "chain",
-    "attack": 14,
-    "attackSpeed": 1.05,
+    "attack": 12,
+    "attackSpeed": 1.27,
     "range": 2,
     "effects": [{ "type": "chain", "bounces": 3 }]
   },
@@ -414,18 +414,18 @@
     "name": "암살 대가",
     "rarity": "rare",
     "role": "execute",
-    "attack": 20,
-    "attackSpeed": 0.95,
+    "attack": 36,
+    "attackSpeed": 0.64,
     "range": 1,
-    "effects": [{ "type": "execute", "threshold": 0.35, "multiplier": 2.0 }]
+    "effects": [{ "type": "execute", "threshold": 0.35, "multiplier": 2 }]
   },
   {
     "id": "manaLeech_rare",
     "name": "마나포식 대주술사",
     "rarity": "rare",
     "role": "manaLeech",
-    "attack": 12,
-    "attackSpeed": 1.0,
+    "attack": 7,
+    "attackSpeed": 1.7,
     "range": 2,
     "effects": [{ "type": "manaLeech", "chance": 0.45, "value": 4 }]
   },
@@ -445,8 +445,8 @@
     "rarity": "rare",
     "role": "critStrike",
     "attack": 17,
-    "attackSpeed": 0.9,
-    "range": 2,
+    "attackSpeed": 0.8,
+    "range": 3,
     "effects": [{ "type": "critStrike", "chance": 0.3, "multiplier": 3.2 }]
   },
   {
@@ -454,9 +454,9 @@
     "name": "빛의 검성",
     "rarity": "epic",
     "role": "single",
-    "attack": 40,
-    "attackSpeed": 1.05,
-    "range": 2,
+    "attack": 50,
+    "attackSpeed": 0.76,
+    "range": 3,
     "effects": [{ "type": "stun", "chance": 0.12, "duration": 0.6 }]
   },
   {
@@ -464,8 +464,8 @@
     "name": "화염 폭군",
     "rarity": "epic",
     "role": "aoe",
-    "attack": 18,
-    "attackSpeed": 1.0,
+    "attack": 21,
+    "attackSpeed": 0.87,
     "range": 2,
     "effects": [{ "type": "aoe", "radius": 1.8 }]
   },
@@ -474,52 +474,40 @@
     "name": "서리 여왕",
     "rarity": "epic",
     "role": "slow",
-    "attack": 22,
-    "attackSpeed": 1.0,
+    "attack": 15,
+    "attackSpeed": 1.42,
     "range": 2,
-    "effects": [
-      { "type": "slow", "value": 0.35, "duration": 1.8, "targets": 2 },
-      { "type": "poison", "value": 5, "duration": 2 }
-    ]
+    "effects": [{ "type": "slow", "value": 0.42, "duration": 1.8, "targets": 2 }, { "type": "poison", "value": 5, "duration": 2 }]
   },
   {
     "id": "stun_epic",
     "name": "뇌전 검투사",
     "rarity": "epic",
     "role": "stun",
-    "attack": 20,
-    "attackSpeed": 0.95,
+    "attack": 17,
+    "attackSpeed": 1.31,
     "range": 1,
-    "effects": [
-      { "type": "stun", "chance": 0.35, "duration": 1.3, "targets": 2 },
-      { "type": "armorBreak", "value": 0.15, "duration": 1.5 }
-    ]
+    "effects": [{ "type": "stun", "chance": 0.35, "duration": 1.3, "targets": 2 }, { "type": "armorBreak", "value": 0.15, "duration": 1.5 }]
   },
   {
     "id": "poison_epic",
     "name": "역병 사도",
     "rarity": "epic",
     "role": "poison",
-    "attack": 13,
-    "attackSpeed": 1.0,
+    "attack": 8,
+    "attackSpeed": 1.64,
     "range": 2,
-    "effects": [
-      { "type": "poison", "value": 11, "duration": 3.8, "targets": 2 },
-      { "type": "slow", "value": 0.15, "duration": 1.5 }
-    ]
+    "effects": [{ "type": "poison", "value": 11, "duration": 3.8, "targets": 2 }, { "type": "slow", "value": 0.15, "duration": 1.5 }]
   },
   {
     "id": "armorBreak_epic",
     "name": "파쇄의 화신",
     "rarity": "epic",
     "role": "armorBreak",
-    "attack": 20,
-    "attackSpeed": 1.0,
-    "range": 2,
-    "effects": [
-      { "type": "armorBreak", "value": 0.38, "duration": 2.8, "targets": 2 },
-      { "type": "poison", "value": 4, "duration": 2 }
-    ]
+    "attack": 15,
+    "attackSpeed": 1.2,
+    "range": 3,
+    "effects": [{ "type": "armorBreak", "value": 0.38, "duration": 2.8, "targets": 2 }, { "type": "poison", "value": 4, "duration": 2 }]
   },
   {
     "id": "buff_epic",
@@ -528,7 +516,7 @@
     "role": "buff",
     "attack": 0,
     "attackSpeed": 0,
-    "range": 4,
+    "range": 3,
     "effects": [{ "type": "buff", "stat": "attackSpeed", "value": 0.4 }]
   },
   {
@@ -546,9 +534,9 @@
     "name": "창왕",
     "rarity": "epic",
     "role": "pierce",
-    "attack": 32,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 29,
+    "attackSpeed": 0.98,
+    "range": 3,
     "effects": [{ "type": "pierce", "bandWidth": 1.1 }]
   },
   {
@@ -556,34 +544,28 @@
     "name": "사수 대장",
     "rarity": "epic",
     "role": "multishot",
-    "attack": 16,
-    "attackSpeed": 1.0,
+    "attack": 15,
+    "attackSpeed": 1.09,
     "range": 2,
-    "effects": [
-      { "type": "multishot", "count": 3 },
-      { "type": "armorBreak", "value": 0.1, "duration": 1 }
-    ]
+    "effects": [{ "type": "multishot", "count": 3 }, { "type": "armorBreak", "value": 0.1, "duration": 1 }]
   },
   {
     "id": "chain_epic",
     "name": "폭풍 소환사",
     "rarity": "epic",
     "role": "chain",
-    "attack": 18,
-    "attackSpeed": 1.1,
+    "attack": 15,
+    "attackSpeed": 1.31,
     "range": 2,
-    "effects": [
-      { "type": "chain", "bounces": 3 },
-      { "type": "slow", "value": 0.15, "duration": 1 }
-    ]
+    "effects": [{ "type": "chain", "bounces": 3 }, { "type": "slow", "value": 0.15, "duration": 1 }]
   },
   {
     "id": "execute_epic",
     "name": "그림자 처형인",
     "rarity": "epic",
     "role": "execute",
-    "attack": 26,
-    "attackSpeed": 1.0,
+    "attack": 48,
+    "attackSpeed": 0.65,
     "range": 1,
     "effects": [{ "type": "execute", "threshold": 0.4, "multiplier": 2.3 }]
   },
@@ -592,8 +574,8 @@
     "name": "마나 포식자",
     "rarity": "epic",
     "role": "manaLeech",
-    "attack": 16,
-    "attackSpeed": 1.0,
+    "attack": 9,
+    "attackSpeed": 1.74,
     "range": 2,
     "effects": [{ "type": "manaLeech", "chance": 0.5, "value": 5 }]
   },
@@ -604,7 +586,7 @@
     "role": "frostAura",
     "attack": 0,
     "attackSpeed": 0,
-    "range": 4,
+    "range": 3,
     "effects": [{ "type": "frostAura", "value": 0.42 }]
   },
   {
@@ -612,9 +594,9 @@
     "name": "일격필살 검사",
     "rarity": "epic",
     "role": "critStrike",
-    "attack": 22,
-    "attackSpeed": 0.95,
-    "range": 2,
+    "attack": 23,
+    "attackSpeed": 0.82,
+    "range": 3,
     "effects": [{ "type": "critStrike", "chance": 0.35, "multiplier": 3.5 }]
   },
   {
@@ -622,9 +604,9 @@
     "name": "여명의 대검사",
     "rarity": "legendary",
     "role": "single",
-    "attack": 52,
-    "attackSpeed": 1.1,
-    "range": 2,
+    "attack": 66,
+    "attackSpeed": 0.78,
+    "range": 3,
     "effects": [{ "type": "stun", "chance": 0.2, "duration": 0.8 }]
   },
   {
@@ -632,8 +614,8 @@
     "name": "멸화의 군주",
     "rarity": "legendary",
     "role": "aoe",
-    "attack": 23,
-    "attackSpeed": 1.0,
+    "attack": 26,
+    "attackSpeed": 0.9,
     "range": 2,
     "effects": [{ "type": "aoe", "radius": 2.2 }]
   },
@@ -642,52 +624,40 @@
     "name": "만년빙의 마녀",
     "rarity": "legendary",
     "role": "slow",
-    "attack": 29,
-    "attackSpeed": 1.0,
+    "attack": 20,
+    "attackSpeed": 1.46,
     "range": 2,
-    "effects": [
-      { "type": "slow", "value": 0.42, "duration": 2.0, "targets": 3 },
-      { "type": "poison", "value": 8, "duration": 2.5 }
-    ]
+    "effects": [{ "type": "slow", "value": 0.5, "duration": 2, "targets": 3 }, { "type": "poison", "value": 8, "duration": 2.5 }]
   },
   {
     "id": "stun_legendary",
     "name": "폭뢰 대전사",
     "rarity": "legendary",
     "role": "stun",
-    "attack": 26,
-    "attackSpeed": 1.0,
+    "attack": 23,
+    "attackSpeed": 1.34,
     "range": 1,
-    "effects": [
-      { "type": "stun", "chance": 0.42, "duration": 1.5, "targets": 3 },
-      { "type": "armorBreak", "value": 0.22, "duration": 2 }
-    ]
+    "effects": [{ "type": "stun", "chance": 0.42, "duration": 1.5, "targets": 3 }, { "type": "armorBreak", "value": 0.22, "duration": 2 }]
   },
   {
     "id": "poison_legendary",
     "name": "역병의 대사제",
     "rarity": "legendary",
     "role": "poison",
-    "attack": 17,
-    "attackSpeed": 1.0,
+    "attack": 10,
+    "attackSpeed": 1.68,
     "range": 2,
-    "effects": [
-      { "type": "poison", "value": 16, "duration": 4.2, "targets": 3 },
-      { "type": "slow", "value": 0.22, "duration": 2 }
-    ]
+    "effects": [{ "type": "poison", "value": 16, "duration": 4.2, "targets": 3 }, { "type": "slow", "value": 0.22, "duration": 2 }]
   },
   {
     "id": "armorBreak_legendary",
     "name": "파멸의 파쇄자",
     "rarity": "legendary",
     "role": "armorBreak",
-    "attack": 26,
-    "attackSpeed": 1.0,
-    "range": 2,
-    "effects": [
-      { "type": "armorBreak", "value": 0.48, "duration": 3.2, "targets": 3 },
-      { "type": "poison", "value": 7, "duration": 2.5 }
-    ]
+    "attack": 19,
+    "attackSpeed": 1.23,
+    "range": 3,
+    "effects": [{ "type": "armorBreak", "value": 0.48, "duration": 3.2, "targets": 3 }, { "type": "poison", "value": 7, "duration": 2.5 }]
   },
   {
     "id": "buff_legendary",
@@ -696,7 +666,7 @@
     "role": "buff",
     "attack": 0,
     "attackSpeed": 0,
-    "range": 5,
+    "range": 3,
     "effects": [{ "type": "buff", "stat": "attackSpeed", "value": 0.55 }]
   },
   {
@@ -714,9 +684,9 @@
     "name": "관통의 창성",
     "rarity": "legendary",
     "role": "pierce",
-    "attack": 41,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 37,
+    "attackSpeed": 1.01,
+    "range": 3,
     "effects": [{ "type": "pierce", "bandWidth": 1.4 }]
   },
   {
@@ -724,34 +694,28 @@
     "name": "사격의 대명수",
     "rarity": "legendary",
     "role": "multishot",
-    "attack": 20,
-    "attackSpeed": 1.0,
+    "attack": 18,
+    "attackSpeed": 1.12,
     "range": 2,
-    "effects": [
-      { "type": "multishot", "count": 4 },
-      { "type": "armorBreak", "value": 0.15, "duration": 1.3 }
-    ]
+    "effects": [{ "type": "multishot", "count": 4 }, { "type": "armorBreak", "value": 0.15, "duration": 1.3 }]
   },
   {
     "id": "chain_legendary",
     "name": "뇌운의 대소환사",
     "rarity": "legendary",
     "role": "chain",
-    "attack": 23,
-    "attackSpeed": 1.1,
+    "attack": 19,
+    "attackSpeed": 1.34,
     "range": 2,
-    "effects": [
-      { "type": "chain", "bounces": 4 },
-      { "type": "slow", "value": 0.22, "duration": 1.3 }
-    ]
+    "effects": [{ "type": "chain", "bounces": 4 }, { "type": "slow", "value": 0.22, "duration": 1.3 }]
   },
   {
     "id": "execute_legendary",
     "name": "심판의 처형자",
     "rarity": "legendary",
     "role": "execute",
-    "attack": 35,
-    "attackSpeed": 1.0,
+    "attack": 63,
+    "attackSpeed": 0.67,
     "range": 1,
     "effects": [{ "type": "execute", "threshold": 0.45, "multiplier": 2.6 }]
   },
@@ -760,8 +724,8 @@
     "name": "심연의 포식자",
     "rarity": "legendary",
     "role": "manaLeech",
-    "attack": 20,
-    "attackSpeed": 1.0,
+    "attack": 11,
+    "attackSpeed": 1.79,
     "range": 2,
     "effects": [{ "type": "manaLeech", "chance": 0.6, "value": 7 }]
   },
@@ -772,7 +736,7 @@
     "role": "frostAura",
     "attack": 0,
     "attackSpeed": 0,
-    "range": 4.5,
+    "range": 3,
     "effects": [{ "type": "frostAura", "value": 0.5 }]
   },
   {
@@ -780,9 +744,9 @@
     "name": "필살의 검투왕",
     "rarity": "legendary",
     "role": "critStrike",
-    "attack": 29,
-    "attackSpeed": 1.0,
-    "range": 2,
+    "attack": 31,
+    "attackSpeed": 0.84,
+    "range": 3,
     "effects": [{ "type": "critStrike", "chance": 0.42, "multiplier": 3.8 }]
   },
   {
@@ -790,78 +754,60 @@
     "name": "천계의 심판자",
     "rarity": "mythic",
     "role": "single",
-    "attack": 68,
-    "attackSpeed": 1.1,
-    "range": 2,
-    "effects": [
-      { "type": "execute", "threshold": 0.3, "multiplier": 2.0 },
-      { "type": "critStrike", "chance": 0.25, "multiplier": 4 }
-    ]
+    "attack": 83,
+    "attackSpeed": 0.81,
+    "range": 3,
+    "effects": [{ "type": "execute", "threshold": 0.3, "multiplier": 2 }, { "type": "critStrike", "chance": 0.25, "multiplier": 4 }]
   },
   {
     "id": "aoe_mythic",
     "name": "종말의 화신",
     "rarity": "mythic",
     "role": "aoe",
-    "attack": 30,
-    "attackSpeed": 1.0,
+    "attack": 33,
+    "attackSpeed": 0.92,
     "range": 2,
-    "effects": [
-      { "type": "aoe", "radius": 2.6 },
-      { "type": "chain", "bounces": 2 }
-    ]
+    "effects": [{ "type": "aoe", "radius": 2.6 }, { "type": "chain", "bounces": 2 }]
   },
   {
     "id": "slow_mythic",
     "name": "영원한 서리왕",
     "rarity": "mythic",
     "role": "slow",
-    "attack": 38,
-    "attackSpeed": 1.0,
+    "attack": 25,
+    "attackSpeed": 1.5,
     "range": 2,
-    "effects": [
-      { "type": "slow", "value": 0.5, "duration": 2.3, "targets": 4 },
-      { "type": "poison", "value": 10, "duration": 3 }
-    ]
+    "effects": [{ "type": "slow", "value": 0.6, "duration": 2.3, "targets": 4 }, { "type": "poison", "value": 10, "duration": 3 }]
   },
   {
     "id": "stun_mythic",
     "name": "천둥의 지배자",
     "rarity": "mythic",
     "role": "stun",
-    "attack": 34,
-    "attackSpeed": 1.0,
+    "attack": 30,
+    "attackSpeed": 1.38,
     "range": 1,
-    "effects": [
-      { "type": "stun", "chance": 0.5, "duration": 1.8, "targets": 4 },
-      { "type": "armorBreak", "value": 0.3, "duration": 2.5 }
-    ]
+    "effects": [{ "type": "stun", "chance": 0.5, "duration": 1.8, "targets": 4 }, { "type": "armorBreak", "value": 0.3, "duration": 2.5 }]
   },
   {
     "id": "poison_mythic",
     "name": "역병의 종언자",
     "rarity": "mythic",
     "role": "poison",
-    "attack": 23,
-    "attackSpeed": 1.0,
+    "attack": 13,
+    "attackSpeed": 1.73,
     "range": 2,
-    "effects": [
-      { "type": "poison", "value": 22, "duration": 5, "targets": 4 },
-      { "type": "slow", "value": 0.3, "duration": 2.5 }
-    ]
+    "effects": [{ "type": "poison", "value": 22, "duration": 5, "targets": 4 }, { "type": "slow", "value": 0.3, "duration": 2.5 }]
   },
   {
     "id": "armorBreak_mythic",
     "name": "붕괴의 군주",
     "rarity": "mythic",
     "role": "armorBreak",
-    "attack": 34,
-    "attackSpeed": 1.0,
-    "range": 2,
-    "effects": [
-      { "type": "armorBreak", "value": 0.6, "duration": 4, "targets": 4 },
-      { "type": "poison", "value": 10, "duration": 3 }
-    ]
+    "attack": 24,
+    "attackSpeed": 1.26,
+    "range": 3,
+    "effects": [{ "type": "armorBreak", "value": 0.6, "duration": 4, "targets": 4 }, { "type": "poison", "value": 10, "duration": 3 }]
   },
   {
     "id": "buff_mythic",
@@ -870,7 +816,7 @@
     "role": "buff",
     "attack": 0,
     "attackSpeed": 0,
-    "range": 6,
+    "range": 4,
     "effects": [{ "type": "buff", "stat": "attackSpeed", "value": 0.75 }]
   },
   {
@@ -888,62 +834,50 @@
     "name": "천공의 창왕",
     "rarity": "mythic",
     "role": "pierce",
-    "attack": 53,
-    "attackSpeed": 1.0,
-    "range": 2,
-    "effects": [
-      { "type": "pierce", "bandWidth": 1.8 },
-      { "type": "chain", "bounces": 2 }
-    ]
+    "attack": 46,
+    "attackSpeed": 1.03,
+    "range": 3,
+    "effects": [{ "type": "pierce", "bandWidth": 1.8 }, { "type": "chain", "bounces": 2 }]
   },
   {
     "id": "multishot_mythic",
     "name": "무한 사격자",
     "rarity": "mythic",
     "role": "multishot",
-    "attack": 27,
-    "attackSpeed": 1.0,
+    "attack": 23,
+    "attackSpeed": 1.15,
     "range": 2,
-    "effects": [
-      { "type": "multishot", "count": 5 },
-      { "type": "critStrike", "chance": 0.2, "multiplier": 3 }
-    ]
+    "effects": [{ "type": "multishot", "count": 5 }, { "type": "critStrike", "chance": 0.2, "multiplier": 3 }]
   },
   {
     "id": "chain_mythic",
     "name": "폭풍의 신",
     "rarity": "mythic",
     "role": "chain",
-    "attack": 30,
-    "attackSpeed": 1.1,
+    "attack": 24,
+    "attackSpeed": 1.38,
     "range": 2,
-    "effects": [
-      { "type": "chain", "bounces": 5 },
-      { "type": "slow", "value": 0.25, "duration": 1.5 }
-    ]
+    "effects": [{ "type": "chain", "bounces": 5 }, { "type": "slow", "value": 0.25, "duration": 1.5 }]
   },
   {
     "id": "execute_mythic",
     "name": "종말의 처형자",
     "rarity": "mythic",
     "role": "execute",
-    "attack": 46,
-    "attackSpeed": 1.0,
+    "attack": 80,
+    "attackSpeed": 0.69,
     "range": 1,
-    "effects": [{ "type": "execute", "threshold": 0.5, "multiplier": 3.0 }]
+    "effects": [{ "type": "execute", "threshold": 0.5, "multiplier": 3 }]
   },
   {
     "id": "manaLeech_mythic",
     "name": "차원의 포식자",
     "rarity": "mythic",
     "role": "manaLeech",
-    "attack": 27,
-    "attackSpeed": 1.0,
+    "attack": 15,
+    "attackSpeed": 1.84,
     "range": 2,
-    "effects": [
-      { "type": "manaLeech", "chance": 0.75, "value": 10 },
-      { "type": "execute", "threshold": 0.3, "multiplier": 1.8 }
-    ]
+    "effects": [{ "type": "manaLeech", "chance": 0.75, "value": 10 }, { "type": "execute", "threshold": 0.3, "multiplier": 1.8 }]
   },
   {
     "id": "frostAura_mythic",
@@ -952,7 +886,7 @@
     "role": "frostAura",
     "attack": 0,
     "attackSpeed": 0,
-    "range": 6,
+    "range": 4,
     "effects": [{ "type": "frostAura", "value": 0.65 }]
   },
   {
@@ -960,12 +894,9 @@
     "name": "필멸의 인도자",
     "rarity": "mythic",
     "role": "critStrike",
-    "attack": 38,
-    "attackSpeed": 1.0,
-    "range": 2,
-    "effects": [
-      { "type": "critStrike", "chance": 0.5, "multiplier": 5 },
-      { "type": "execute", "threshold": 0.2, "multiplier": 1.5 }
-    ]
+    "attack": 40,
+    "attackSpeed": 0.86,
+    "range": 3,
+    "effects": [{ "type": "critStrike", "chance": 0.5, "multiplier": 5 }, { "type": "execute", "threshold": 0.2, "multiplier": 1.5 }]
   }
 ]

@@ -17,9 +17,19 @@ const SYNCED_KEYS = [
   'rd_attendance',
 ];
 
+// 이 브라우저에 남아있는 게임 데이터가 어느 계정의 것인지 기억해둔다.
+const OWNER_KEY = 'rd_data_owner';
+
 async function currentUserId(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.user.id ?? null;
+}
+
+// 이 브라우저에 남은 게임 데이터를 전부 지운다. 새로 가입하거나 탈퇴할 때
+// 이전 계정의 데이터가 다음 계정으로 이어지지 않게 하기 위해 쓴다.
+export function clearLocalGameData(): void {
+  SYNCED_KEYS.forEach((key) => localStorage.removeItem(key));
+  localStorage.removeItem(OWNER_KEY);
 }
 
 // 로그인 직후 한 번 호출: 서버에 저장된 데이터가 있으면 브라우저 저장소를
@@ -27,6 +37,12 @@ async function currentUserId(): Promise<string | null> {
 export async function pullSnapshot(): Promise<void> {
   const userId = await currentUserId();
   if (!userId) return;
+
+  // 브라우저에 남은 데이터가 "다른 계정"의 것이면(같은 폰에서 계정을 바꿔 로그인한
+  // 경우) 지우고 시작해서 이전 계정 데이터가 섞이지 않게 한다.
+  const owner = localStorage.getItem(OWNER_KEY);
+  if (owner && owner !== userId) clearLocalGameData();
+  localStorage.setItem(OWNER_KEY, userId);
 
   try {
     const { data, error } = await supabase

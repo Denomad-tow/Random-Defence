@@ -3,7 +3,7 @@ import { BOX_TYPES } from '../meta/gacha';
 
 const STYLE_ID = 'rd-admin-mail-style';
 
-function injectStyle(): void {
+export function injectStyle(): void {
   if (document.getElementById(STYLE_ID)) return;
 
   const style = document.createElement('style');

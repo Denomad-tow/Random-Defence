@@ -1,4 +1,4 @@
-import { signIn, signUp } from '../meta/auth';
+import { signIn, signUp, requestPasswordReset } from '../meta/auth';
 
 const STYLE_ID = 'rd-login-style';
 
@@ -110,6 +110,22 @@ function injectStyle(): void {
       opacity: 0.6;
       cursor: default;
     }
+    .rd-login-forgot {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      padding: 6px 0;
+      background: none;
+      border: none;
+      color: #8a8272;
+      font-family: inherit;
+      font-size: 12px;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .rd-login-error.ok {
+      color: #a8ffb0;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -117,7 +133,7 @@ function injectStyle(): void {
 export function mountLoginOverlay(onAuthenticated: () => void): void {
   injectStyle();
 
-  let mode: 'login' | 'signup' = 'login';
+  let mode: 'login' | 'signup' | 'reset' = 'login';
 
   const overlay = document.createElement('div');
   overlay.className = 'rd-login-overlay';
@@ -188,17 +204,28 @@ export function mountLoginOverlay(onAuthenticated: () => void): void {
   submitButton.textContent = '로그인';
   form.appendChild(submitButton);
 
-  function setMode(next: 'login' | 'signup'): void {
+  const forgotButton = document.createElement('button');
+  forgotButton.type = 'button';
+  forgotButton.className = 'rd-login-forgot';
+  forgotButton.textContent = '비밀번호를 잊으셨나요?';
+  form.appendChild(forgotButton);
+
+  function setMode(next: 'login' | 'signup' | 'reset'): void {
     mode = next;
     loginTab.classList.toggle('active', mode === 'login');
     signupTab.classList.toggle('active', mode === 'signup');
-    passwordInput.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
-    submitButton.textContent = mode === 'login' ? '로그인' : '가입하기';
+    passwordField.style.display = mode === 'reset' ? 'none' : 'block';
+    forgotButton.style.display = mode === 'reset' ? 'none' : 'block';
+    passwordInput.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+    submitButton.textContent = mode === 'login' ? '로그인' : mode === 'signup' ? '가입하기' : '초기화 요청 보내기';
+    subtitle.textContent = mode === 'reset' ? '닉네임을 입력하면 운영자에게 요청이 전달돼요' : '닉네임으로 시작하세요';
     errorText.textContent = '';
+    errorText.classList.remove('ok');
   }
 
   loginTab.addEventListener('click', () => setMode('login'));
   signupTab.addEventListener('click', () => setMode('signup'));
+  forgotButton.addEventListener('click', () => setMode('reset'));
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -207,8 +234,28 @@ export function mountLoginOverlay(onAuthenticated: () => void): void {
 
   async function handleSubmit(): Promise<void> {
     errorText.textContent = '';
+    errorText.classList.remove('ok');
     const nickname = nicknameInput.value.trim();
     const password = passwordInput.value;
+
+    if (mode === 'reset') {
+      if (!nickname) {
+        errorText.textContent = '닉네임을 입력해주세요';
+        return;
+      }
+      submitButton.disabled = true;
+      submitButton.textContent = '보내는 중...';
+      const resetResult = await requestPasswordReset(nickname);
+      submitButton.disabled = false;
+      submitButton.textContent = '초기화 요청 보내기';
+      if (!resetResult.ok) {
+        errorText.textContent = resetResult.error ?? '오류가 발생했어요';
+        return;
+      }
+      errorText.classList.add('ok');
+      errorText.textContent = '운영자에게 요청을 보냈어요. 운영자가 알려주는 임시 비밀번호로 로그인해주세요';
+      return;
+    }
 
     if (!nickname || !password) {
       errorText.textContent = '닉네임과 비밀번호를 입력해주세요';

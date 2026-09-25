@@ -1,4 +1,5 @@
 import { supabase } from '../core/supabaseClient';
+import { clearLocalGameData } from '../core/cloudSync';
 
 // Supabase Auth는 이메일 형식을 요구하지만, 친구들끼리 가볍게 즐기는 게임이라
 // 실제 이메일 없이 "닉네임 + 비밀번호"만으로 가입/로그인하게 한다. 닉네임을
@@ -51,6 +52,10 @@ export async function signUp(nickname: string, password: string): Promise<AuthRe
     };
   }
 
+  // 새 계정은 항상 빈 상태로 시작한다. 이 브라우저에 이전 계정(탈퇴한 계정 등)의
+  // 데이터가 남아있으면 그대로 이어받게 되므로 지운다.
+  clearLocalGameData();
+
   return { ok: true };
 }
 
@@ -96,5 +101,23 @@ export async function deleteAccount(nickname: string, password: string): Promise
   }
 
   await supabase.auth.signOut();
+  clearLocalGameData();
+  return { ok: true };
+}
+
+// 비밀번호를 잊었을 때: 운영자("관리") 우편함으로 초기화 요청을 보낸다. 실제 이메일이
+// 없는 가짜 이메일 방식이라 메일로 재설정 링크를 보낼 수 없어서, 운영자가 임시
+// 비밀번호를 정해서 알려주는 방식으로 처리한다. 로그인 전에도 호출할 수 있다.
+export async function requestPasswordReset(nickname: string): Promise<AuthResult> {
+  const trimmed = nickname.trim();
+  if (!trimmed) return { ok: false, error: '닉네임을 입력해주세요' };
+
+  const { error } = await supabase.rpc('request_password_reset', { p_nickname: trimmed });
+  if (error) {
+    if (error.message.includes('user not found')) {
+      return { ok: false, error: '해당 닉네임의 계정을 찾을 수 없어요' };
+    }
+    return { ok: false, error: '요청을 보내지 못했어요. 잠시 후 다시 시도해주세요' };
+  }
   return { ok: true };
 }

@@ -65,6 +65,18 @@ export async function findUserByNickname(nickname: string): Promise<string | nul
   }
 }
 
+export async function adminResetPassword(nickname: string, newPassword: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.rpc('admin_reset_password', {
+      p_nickname: nickname,
+      p_new_password: newPassword,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 export interface SendMailParams {
   title: string;
   body: string;

@@ -4,6 +4,7 @@ import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
 import { getBoxType } from '../meta/gacha';
 import { mountAdminMailOverlay } from '../core/adminMailOverlay';
+import { mountAdminResetPasswordOverlay } from '../core/adminResetPasswordOverlay';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -75,6 +76,18 @@ export class MailboxScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .setPadding(px(8), px(8), px(8), px(8))
         .on('pointerdown', () => this.openComposeOverlay());
+
+      this.add
+        .text(width - px(12), height * 0.09, '비번 초기화', {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(12)}px`,
+          color: '#ffb0b0',
+          fontStyle: 'bold',
+        })
+        .setOrigin(1, 0.5)
+        .setInteractive({ useHandCursor: true })
+        .setPadding(px(8), px(6), px(8), px(6))
+        .on('pointerdown', () => mountAdminResetPasswordOverlay());
     }
 
     if (this.loading) {

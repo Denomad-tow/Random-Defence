@@ -12,6 +12,7 @@ import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
 import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { showBugReportOverlay } from '../core/bugReportOverlay';
+import { showChangePasswordOverlay } from '../core/changePasswordOverlay';
 import { canClaimAttendanceToday, currentAttendanceDay, claimAttendance } from '../meta/attendance';
 import { ATTENDANCE_REWARDS } from '../core/attendanceBalance';
 import { getBoxType } from '../meta/gacha';
@@ -191,6 +192,19 @@ export class DeckSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setPadding(px(6), px(6), px(6), px(6))
       .on('pointerdown', () => this.handleDeleteAccount());
+
+    // 파티 버튼 아래에는 "비밀번호 변경" 링크를 둔다.
+    const partyX = navStartX + 1 * (navSlotWidth + navGap);
+    this.add
+      .text(partyX, deleteLinkY, '비밀번호 변경', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#7a7a6a',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.handleChangePassword());
 
     // 순위 버튼 아래에는 "버그 제보" 링크를 대칭으로 배치한다.
     const rankingX = navStartX + 2 * (navSlotWidth + navGap);
@@ -486,6 +500,14 @@ export class DeckSelectScene extends Phaser.Scene {
       .then(() => {
         window.location.reload();
       });
+  }
+
+  private handleChangePassword(): void {
+    if (!this.nickname) {
+      this.showToast('잠시 후 다시 시도해주세요');
+      return;
+    }
+    showChangePasswordOverlay(this.nickname);
   }
 
   private handleDeleteAccount(): void {

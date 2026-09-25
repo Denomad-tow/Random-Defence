@@ -105,6 +105,28 @@ export async function deleteAccount(nickname: string, password: string): Promise
   return { ok: true };
 }
 
+// 로그인한 상태에서 비밀번호 바꾸기. 현재 비밀번호를 다시 확인(재로그인)한 뒤 변경한다.
+export async function changePassword(nickname: string, currentPassword: string, newPassword: string): Promise<AuthResult> {
+  if (newPassword.length < 6) {
+    return { ok: false, error: '새 비밀번호는 6자 이상이어야 해요' };
+  }
+  if (newPassword === currentPassword) {
+    return { ok: false, error: '현재 비밀번호와 다른 비밀번호를 입력해주세요' };
+  }
+
+  const email = nicknameToEmail(nickname);
+  const { error: reauthError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+  if (reauthError) {
+    return { ok: false, error: '현재 비밀번호가 올바르지 않아요' };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) {
+    return { ok: false, error: '비밀번호를 바꾸지 못했어요. 잠시 후 다시 시도해주세요' };
+  }
+  return { ok: true };
+}
+
 // 비밀번호를 잊었을 때: 운영자("관리") 우편함으로 초기화 요청을 보낸다. 실제 이메일이
 // 없는 가짜 이메일 방식이라 메일로 재설정 링크를 보낼 수 없어서, 운영자가 임시
 // 비밀번호를 정해서 알려주는 방식으로 처리한다. 로그인 전에도 호출할 수 있다.

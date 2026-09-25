@@ -851,17 +851,19 @@ export class CoopGameScene extends Phaser.Scene {
       })
       .setOrigin(1, 0.5);
 
+    // 스테이지·몬스터·마나 정보는 "나가기"/방 코드와 같은 줄에 두면 휴대폰
+    // 좁은 화면에서 글씨가 겹치므로, 그 아래 전용 줄에 따로 표시한다.
     this.hudText = this.add
-      .text(width / 2, headerHeight * 0.4, '', {
+      .text(width / 2, headerHeight * 0.85, '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(14)}px`,
+        fontSize: `${px(13)}px`,
         color: '#f6e6b4',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     this.membersText = this.add
-      .text(width / 2, headerHeight * 0.78, '', {
+      .text(width / 2, headerHeight * 1.3, '', {
         fontFamily: TITLE_FONT,
         fontSize: `${px(12)}px`,
         color: '#9fd8ff',
@@ -895,10 +897,10 @@ export class CoopGameScene extends Phaser.Scene {
 
   private drawSpeedRow(width: number, headerHeight: number): void {
     if (this.isHost) {
-      this.drawSpeedControls(width / 2, headerHeight * 1.18);
+      this.drawSpeedControls(width / 2, headerHeight * 1.75);
     } else {
       this.speedText = this.add
-        .text(width / 2, headerHeight * 1.18, '', {
+        .text(width / 2, headerHeight * 1.75, '', {
           fontFamily: TITLE_FONT,
           fontSize: `${px(12)}px`,
           color: '#8a8272',

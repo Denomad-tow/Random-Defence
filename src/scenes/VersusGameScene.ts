@@ -646,7 +646,7 @@ export class VersusGameScene extends Phaser.Scene {
     this.drawFieldSlots(this.boardCells, boardLayout.cellSize);
 
     this.drawHeader(width, height);
-    this.drawSpeedControls(width / 2, headerHeight * 1.18);
+    this.drawSpeedControls(width / 2, headerHeight * 2.0);
     this.drawSummonButton(width / 2, buttonY, Math.min(boardLayout.cellSize * 3.4, width * 0.6), buttonHeight);
   }
 
@@ -794,17 +794,19 @@ export class VersusGameScene extends Phaser.Scene {
       })
       .setOrigin(1, 0.5);
 
+    // 스테이지·몬스터·마나 정보는 "나가기"/방 코드와 같은 줄에 두면 휴대폰
+    // 좁은 화면에서 글씨가 겹치므로, 그 아래 전용 줄에 따로 표시한다.
     this.hudText = this.add
-      .text(width / 2, headerHeight * 0.4, '', {
+      .text(width / 2, headerHeight * 0.85, '', {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(14)}px`,
+        fontSize: `${px(13)}px`,
         color: '#f6e6b4',
         fontStyle: 'bold',
       })
       .setOrigin(0.5);
 
     this.opponentsText = this.add
-      .text(width / 2, headerHeight * 0.78, '', {
+      .text(width / 2, headerHeight * 1.3, '', {
         fontFamily: TITLE_FONT,
         fontSize: `${px(11.5)}px`,
         color: '#9fd8ff',

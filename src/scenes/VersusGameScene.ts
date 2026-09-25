@@ -978,9 +978,18 @@ export class VersusGameScene extends Phaser.Scene {
     this.add
       .zone(x, y, width, height)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.handleSummonTap());
+      .on('pointerdown', () => {
+        this.pulseButtonPress(this.summonButtonText);
+        this.handleSummonTap();
+      });
 
     this.refreshSummonButton();
+  }
+
+  // 버튼을 눌렀을 때 살짝 눌리는 느낌을 주는 공용 연출.
+  private pulseButtonPress(target?: Phaser.GameObjects.GameObject & { setScale: (v: number) => unknown }): void {
+    if (!target) return;
+    this.tweens.add({ targets: target, scale: 0.88, duration: 60, yoyo: true, ease: 'Quad.Out' });
   }
 
   private hasEmptySlot(): boolean {

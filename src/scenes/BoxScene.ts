@@ -134,6 +134,10 @@ export class BoxScene extends Phaser.Scene {
   private layoutReveal(cards: DrawnCard[]): void {
     const { width, height } = this.scale;
 
+    if (cards.some((c) => c.unit.rarity === 'mythic')) {
+      this.announceMythic(width, height);
+    }
+
     this.add
       .text(width / 2, height * 0.18, '획득!', {
         fontFamily: TITLE_FONT,
@@ -185,6 +189,25 @@ export class BoxScene extends Phaser.Scene {
         this.revealed = null;
         this.layout();
       });
+  }
+
+  // 신화 등급은 "신화는 특별한 연출" 원칙에 맞춰, 카드마다 붙는 작은 반짝임 말고도
+  // 화면 전체가 살짝 흔들리고 무지개색 빛이 번쩍이는 연출을 한 번 더 넣는다.
+  private announceMythic(width: number, height: number): void {
+    this.cameras.main.shake(350, 0.008);
+
+    const colors = [0xff5d7a, 0xffc15a, 0xfff066, 0x6fe06f, 0x4f9dff, 0xb67dff];
+    colors.forEach((color, i) => {
+      const ring = this.add.circle(width / 2, height / 2, height * 0.1, color, 0.28).setDepth(950);
+      this.tweens.add({
+        targets: ring,
+        scale: 6,
+        alpha: 0,
+        duration: 700,
+        delay: i * 40,
+        onComplete: () => ring.destroy(),
+      });
+    });
   }
 
   private drawRevealCard(card: DrawnCard, x: number, y: number, size: number): void {

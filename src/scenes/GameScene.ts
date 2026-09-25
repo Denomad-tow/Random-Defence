@@ -38,6 +38,7 @@ import { computeRunReward, type RunReward } from '../meta/rewards';
 import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { generalAttackMultiplier, generalAttackSpeedBonus, roleMultiplier } from '../meta/research';
 import { getCurrentNickname } from '../meta/auth';
+import { hasTutorialSeen, markTutorialSeen } from '../meta/tutorial';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
@@ -91,6 +92,7 @@ export class GameScene extends Phaser.Scene {
   private rangeGraphics?: Phaser.GameObjects.Graphics;
   private rangeToggleText?: Phaser.GameObjects.Text;
   private confirmModalContainer?: Phaser.GameObjects.Container;
+  private tutorialContainer?: Phaser.GameObjects.Container;
   private currentNickname = '';
   private nicknameText?: Phaser.GameObjects.Text;
   private lastTapIndex: number | null = null;
@@ -141,6 +143,10 @@ export class GameScene extends Phaser.Scene {
       this.currentNickname = nick ?? '';
       this.nicknameText?.setText(this.currentNickname ? `${this.currentNickname}님` : '');
     });
+
+    if (!hasTutorialSeen()) {
+      this.showTutorialStep(0);
+    }
 
     this.firstSpawnTimer = this.time.delayedCall(FIRST_SPAWN_DELAY_MS, () => {
       this.spawnMonster();
@@ -704,6 +710,7 @@ export class GameScene extends Phaser.Scene {
     this.children.removeAll(true);
     this.monsters = [];
     this.confirmModalContainer = undefined;
+    this.tutorialContainer = undefined;
 
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#07080d');
@@ -1215,6 +1222,138 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  // 처음 접속한 사람에게만(rd_tutorial_seen_v1) 한 번 보여주는 짧은 사용법 안내.
+  private readonly tutorialSteps: { title: string; body: string }[] = [
+    {
+      title: '모험가 길드에 오신 걸 환영해요!',
+      body: '몬스터가 위에서부터 길을 따라 내려와요. 유닛을 소환해서 자동으로 막아보세요.',
+    },
+    {
+      title: '유닛 소환하기',
+      body: '화면 아래 "소환" 버튼을 누르면 마나를 써서 무작위 유닛이 빈 칸에 나와요.',
+    },
+    {
+      title: '합성으로 강해지기',
+      body: '같은 유닛을 드래그해서 다른 칸으로 겹치면 별이 올라가고 더 강해져요.',
+    },
+    {
+      title: '유닛 강화하기',
+      body: '유닛을 빠르게 두 번 탭하면 강화할 수 있어요. 강화하면 공격력이 올라가요.',
+    },
+    {
+      title: '계속 성장하기',
+      body: '상자를 열어 새 유닛을 얻고, 연구·컬렉션에서 더 강해질 수 있어요. 즐거운 모험 되세요!',
+    },
+  ];
+
+  private showTutorialStep(step: number): void {
+    this.tutorialContainer?.destroy(true);
+
+    const { width, height } = this.scale;
+    const container = this.add.container(0, 0).setDepth(950);
+    this.tutorialContainer = container;
+
+    const backdrop = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.62);
+    container.add(backdrop);
+
+    const cardWidth = Math.min(width * 0.82, px(340));
+    const cardHeight = height * 0.3;
+    const cardY = height * 0.5;
+
+    const cardBg = this.add.graphics();
+    cardBg.fillStyle(0x151a28, 0.98);
+    cardBg.fillRoundedRect(width / 2 - cardWidth / 2, cardY - cardHeight / 2, cardWidth, cardHeight, px(14));
+    cardBg.lineStyle(px(2), 0xd4b36a, 0.9);
+    cardBg.strokeRoundedRect(width / 2 - cardWidth / 2, cardY - cardHeight / 2, cardWidth, cardHeight, px(14));
+    container.add(cardBg);
+
+    const skip = this.add
+      .text(width / 2 + cardWidth / 2 - px(10), cardY - cardHeight / 2 + px(10), '건너뛰기', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#8a8272',
+      })
+      .setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.closeTutorial());
+    container.add(skip);
+
+    const progress = this.add
+      .text(width / 2 - cardWidth / 2 + px(14), cardY - cardHeight / 2 + px(10), `${step + 1}/${this.tutorialSteps.length}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#8a8272',
+      })
+      .setOrigin(0, 0);
+    container.add(progress);
+
+    const info = this.tutorialSteps[step];
+
+    const title = this.add
+      .text(width / 2, cardY - cardHeight * 0.24, info.title, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(16)}px`,
+        color: '#f6e6b4',
+        fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: cardWidth * 0.88 },
+      })
+      .setOrigin(0.5, 0);
+    container.add(title);
+
+    const body = this.add
+      .text(width / 2, cardY - cardHeight * 0.24 + title.height + px(14), info.body, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#9a917d',
+        align: 'center',
+        wordWrap: { width: cardWidth * 0.88 },
+        lineSpacing: px(4),
+      })
+      .setOrigin(0.5, 0);
+    container.add(body);
+
+    const isLast = step === this.tutorialSteps.length - 1;
+    const buttonY = cardY + cardHeight * 0.36;
+    const buttonWidth = cardWidth * 0.5;
+    const buttonHeight = cardHeight * 0.2;
+
+    const nextBg = this.add.graphics();
+    nextBg.fillStyle(0x2a2416, 1);
+    nextBg.fillRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    nextBg.lineStyle(px(1.5), 0xd4b36a, 1);
+    nextBg.strokeRoundedRect(width / 2 - buttonWidth / 2, buttonY - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
+    container.add(nextBg);
+
+    const nextText = this.add
+      .text(width / 2, buttonY, isLast ? '시작하기!' : '다음', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(14)}px`,
+        color: '#ffd98a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5);
+    container.add(nextText);
+
+    const nextZone = this.add
+      .zone(width / 2, buttonY, buttonWidth, buttonHeight)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        if (isLast) {
+          this.closeTutorial();
+        } else {
+          this.showTutorialStep(step + 1);
+        }
+      });
+    container.add(nextZone);
+  }
+
+  private closeTutorial(): void {
+    markTutorialSeen();
+    this.tutorialContainer?.destroy(true);
+    this.tutorialContainer = undefined;
+  }
+
   private performEnhance(index: number): void {
     const placed = this.placedUnits.get(index);
     if (!placed) return;
@@ -1461,7 +1600,16 @@ export class GameScene extends Phaser.Scene {
     this.add
       .zone(x, y, buttonWidth, buttonHeight)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.trySummon());
+      .on('pointerdown', () => {
+        this.pulseButtonPress(this.summonButtonText);
+        this.trySummon();
+      });
+  }
+
+  // 버튼을 눌렀을 때 살짝 눌리는 느낌을 주는 공용 연출.
+  private pulseButtonPress(target?: Phaser.GameObjects.GameObject & { setScale: (v: number) => unknown }): void {
+    if (!target) return;
+    this.tweens.add({ targets: target, scale: 0.88, duration: 60, yoyo: true, ease: 'Quad.Out' });
   }
 
   private trySummon(): void {

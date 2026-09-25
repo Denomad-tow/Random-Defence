@@ -11,6 +11,7 @@ import { sortByRarityThenLevel } from '../meta/unitSort';
 import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
 import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
+import { showBugReportOverlay } from '../core/bugReportOverlay';
 import { canClaimAttendanceToday, currentAttendanceDay, claimAttendance } from '../meta/attendance';
 import { ATTENDANCE_REWARDS } from '../core/attendanceBalance';
 import { getBoxType } from '../meta/gacha';
@@ -187,6 +188,19 @@ export class DeckSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setPadding(px(6), px(6), px(6), px(6))
       .on('pointerdown', () => this.handleDeleteAccount());
+
+    // 순위 버튼 아래에는 "버그 제보" 링크를 대칭으로 배치한다.
+    const rankingX = navStartX + 2 * (navSlotWidth + navGap);
+    this.add
+      .text(rankingX, deleteLinkY, '버그 제보', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#7a7a6a',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => showBugReportOverlay());
 
     this.drawSlotTabs(width, height * 0.32);
 

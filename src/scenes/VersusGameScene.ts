@@ -23,6 +23,7 @@ import {
 import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
 import { getCurrentNickname } from '../meta/auth';
 import { computeRunReward, type RunReward } from '../meta/rewards';
+import { recordVersusResult } from '../meta/versusRanking';
 import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
 import { getBoxType } from '../meta/gacha';
@@ -470,6 +471,17 @@ export class VersusGameScene extends Phaser.Scene {
     const reward = computeRunReward(stage);
     addGold(reward.gold);
     addBox(reward.boxId);
+
+    // 등수를 매길 수 있는 경우(승리했거나, 직접 탈락 처리된 경우)에만 순위표에
+    // 기록한다. 남이 이겨서 전달받은 것뿐인 방어적인 경로는 등수를 정확히 알 수
+    // 없어서 기록하지 않는다.
+    const placement = won ? 1 : rank;
+    if (placement !== undefined) {
+      void recordVersusResult(
+        { mode: this.mode, partySize: this.members.length, placement, stageReached: stage },
+        this.nickname,
+      );
+    }
 
     const title = won ? '승리!' : rank ? `탈락! ${rank}등` : '경쟁 전투 종료';
     this.showResultOverlay(title, stage, reward, extraNote);

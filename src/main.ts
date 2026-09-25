@@ -10,6 +10,7 @@ import { CodexScene } from './scenes/CodexScene';
 import { PartyScene } from './scenes/PartyScene';
 import { CoopGameScene } from './scenes/CoopGameScene';
 import { VersusGameScene } from './scenes/VersusGameScene';
+import { RankingScene } from './scenes/RankingScene';
 import { DPR } from './core/dpr';
 import { hasSession } from './meta/auth';
 import { mountLoginOverlay } from './core/loginOverlay';
@@ -34,6 +35,7 @@ function startGame(): void {
       PartyScene,
       CoopGameScene,
       VersusGameScene,
+      RankingScene,
     ],
     scale: {
       mode: Phaser.Scale.NONE,

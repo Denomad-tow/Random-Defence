@@ -84,8 +84,19 @@ export interface ChatPayload {
   message: string;
 }
 
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
-const CODE_LENGTH = 5;
+// 방 코드는 방장이 직접 정한다(자동 생성 없음). 대신 "지금 열려 있는 방" 목록을
+// 보여주기 위해, 별도의 공용 로비 채널(party-lobby) 하나에 방장들이 자기 방
+// 정보(코드·닉네임·모드·정원)를 프레즌스로 올려둔다. 방장이 나가거나 게임을
+// 시작하면 내려가고, 접속이 끊기면 자동으로 사라진다(별도 정리 로직 불필요).
+export interface LobbyRoomInfo {
+  code: string;
+  hostNickname: string;
+  mode: PartyMode;
+  maxSize: number;
+}
+
+const LOBBY_CHANNEL_NAME = 'party-lobby';
+let lobbyChannel: RealtimeChannel | null = null;
 
 let channel: RealtimeChannel | null = null;
 let hostFlag = false;
@@ -105,14 +116,6 @@ let versusGiftHandler: (payload: VersusGiftPayload) => void = () => {};
 let versusEliminatedHandler: (payload: VersusEliminatedPayload) => void = () => {};
 let versusWinHandler: (payload: VersusWinPayload) => void = () => {};
 let chatHandler: (payload: ChatPayload) => void = () => {};
-
-function randomCode(): string {
-  let code = '';
-  for (let i = 0; i < CODE_LENGTH; i += 1) {
-    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  }
-  return code;
-}
 
 function membersFromPresence(): PartyMember[] {
   if (!channel) return [];
@@ -234,15 +237,14 @@ function connect(
 }
 
 export async function createRoom(
+  code: string,
   nickname: string,
   maxSize: number,
   mode: PartyMode,
   onMembersChange: (members: PartyMember[]) => void,
   onStart: (payload: StartPayload) => void,
-): Promise<string> {
-  const code = randomCode();
-  await connect(code, nickname, true, onMembersChange, onStart, maxSize, mode);
-  return code;
+): Promise<void> {
+  await connect(code.toUpperCase(), nickname, true, onMembersChange, onStart, maxSize, mode);
 }
 
 export async function joinRoom(
@@ -368,6 +370,53 @@ export function setChatHandler(handler: (payload: ChatPayload) => void): void {
 
 export function broadcastChat(payload: ChatPayload): void {
   channel?.send({ type: 'broadcast', event: 'chat', payload });
+}
+
+// ----- 로비(지금 열려 있는 방 목록) -----
+
+function lobbyRoomsFromPresence(): LobbyRoomInfo[] {
+  if (!lobbyChannel) return [];
+  const state = lobbyChannel.presenceState<LobbyRoomInfo>();
+  return Object.values(state).flat();
+}
+
+// 파티 화면에 들어오면 한 번 호출한다. 이후 방을 열거나 닫을 때는
+// publishRoomToLobby/unpublishRoomFromLobby만 부르면 되고, 이 연결 자체는
+// 파티 화면을 나갈 때 disconnectLobby()로 끊는다.
+export function connectLobby(nickname: string, onListChange: (rooms: LobbyRoomInfo[]) => void): Promise<void> {
+  if (lobbyChannel) {
+    onListChange(lobbyRoomsFromPresence());
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    lobbyChannel = supabase.channel(LOBBY_CHANNEL_NAME, {
+      config: { presence: { key: nickname } },
+    });
+
+    lobbyChannel.on('presence', { event: 'sync' }, () => {
+      onListChange(lobbyRoomsFromPresence());
+    });
+
+    lobbyChannel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') resolve();
+    });
+  });
+}
+
+export function publishRoomToLobby(info: LobbyRoomInfo): void {
+  void lobbyChannel?.track(info);
+}
+
+export function unpublishRoomFromLobby(): void {
+  void lobbyChannel?.untrack();
+}
+
+export function disconnectLobby(): void {
+  if (lobbyChannel) {
+    void supabase.removeChannel(lobbyChannel);
+    lobbyChannel = null;
+  }
 }
 
 export function isRoomHost(): boolean {

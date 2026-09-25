@@ -6,9 +6,14 @@ import {
   isRoomHost,
   currentRoomCode,
   setRoomFullHandler,
+  connectLobby,
+  disconnectLobby,
+  publishRoomToLobby,
+  unpublishRoomFromLobby,
   type PartyMember,
   type PartyMode,
   type StartPayload,
+  type LobbyRoomInfo,
 } from '../meta/party';
 
 const PARTY_SIZE_OPTIONS = [2, 3, 4, 5];
@@ -253,6 +258,51 @@ function injectStyle(): void {
       color: #a8ffb0;
       font-weight: 700;
     }
+    .rd-party-room-list-empty {
+      font-size: 11.5px;
+      color: #6a6458;
+      text-align: center;
+      padding: 10px 0;
+    }
+    .rd-party-room-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .rd-party-room-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(212, 179, 106, 0.4);
+      background: #0d1018;
+      cursor: pointer;
+      font-family: inherit;
+      text-align: left;
+    }
+    .rd-party-room-item:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .rd-party-room-item-code {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #ffd98a;
+      flex-shrink: 0;
+    }
+    .rd-party-room-item-info {
+      font-size: 11px;
+      color: #9a917d;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .rd-party-leave {
       width: 100%;
       margin-top: 10px;
@@ -281,8 +331,10 @@ export function mountPartyOverlay(
   let busy = false;
   let errorMsg = '';
   let codeInputValue = '';
+  let hostCodeInputValue = '';
   let selectedMaxSize = DEFAULT_PARTY_SIZE;
   let selectedMode: PartyMode = DEFAULT_PARTY_MODE;
+  let openRooms: LobbyRoomInfo[] = [];
 
   const overlay = document.createElement('div');
   overlay.className = 'rd-party-overlay';
@@ -293,6 +345,11 @@ export function mountPartyOverlay(
     members = [];
     errorMsg = '방이 꽉 찼어요. 방장에게 다른 방을 만들어달라고 해보세요';
     render();
+  });
+
+  void connectLobby(nickname, (rooms) => {
+    openRooms = rooms;
+    if (view === 'menu') render();
   });
 
   function handleMembersChange(next: PartyMember[]): void {
@@ -306,14 +363,28 @@ export function mountPartyOverlay(
 
   function handleCreate(): void {
     if (busy) return;
+
+    const code = hostCodeInputValue.trim().toUpperCase();
+    if (code.length < 4) {
+      errorMsg = '4자 이상의 초대 코드를 정해주세요';
+      render();
+      return;
+    }
+    if (openRooms.some((r) => r.code === code)) {
+      errorMsg = '이미 사용 중인 코드예요. 다른 코드를 정해주세요';
+      render();
+      return;
+    }
+
     busy = true;
     errorMsg = '';
     render();
 
-    createRoom(nickname, selectedMaxSize, selectedMode, handleMembersChange, handleRoomStart)
+    createRoom(code, nickname, selectedMaxSize, selectedMode, handleMembersChange, handleRoomStart)
       .then(() => {
         busy = false;
         view = 'waiting';
+        publishRoomToLobby({ code, hostNickname: nickname, mode: selectedMode, maxSize: selectedMaxSize });
         render();
       })
       .catch((err: Error) => {
@@ -350,12 +421,14 @@ export function mountPartyOverlay(
   }
 
   function handleHostStart(): void {
+    unpublishRoomFromLobby();
     const payload: StartPayload = { mode: selectedMode };
     broadcastStart(payload);
     handleRoomStart(payload);
   }
 
   function handleLeave(): void {
+    if (isRoomHost()) unpublishRoomFromLobby();
     leavePartyRoom();
     view = 'menu';
     members = [];
@@ -444,6 +517,25 @@ export function mountPartyOverlay(
     });
     createSection.appendChild(sizeRow);
 
+    const codeLabel = document.createElement('div');
+    codeLabel.className = 'rd-party-section-title';
+    codeLabel.textContent = '초대 코드 정하기';
+    createSection.appendChild(codeLabel);
+
+    const codeRow = document.createElement('div');
+    codeRow.className = 'rd-party-row';
+    const hostCodeInput = document.createElement('input');
+    hostCodeInput.type = 'text';
+    hostCodeInput.maxLength = 8;
+    hostCodeInput.placeholder = '원하는 코드 (예: ABCDE)';
+    hostCodeInput.value = hostCodeInputValue;
+    hostCodeInput.addEventListener('input', () => {
+      hostCodeInputValue = hostCodeInput.value.toUpperCase();
+      hostCodeInput.value = hostCodeInputValue;
+    });
+    codeRow.appendChild(hostCodeInput);
+    createSection.appendChild(codeRow);
+
     const createBtn = document.createElement('button');
     createBtn.type = 'button';
     createBtn.className = 'rd-party-btn';
@@ -452,6 +544,49 @@ export function mountPartyOverlay(
     createBtn.addEventListener('click', handleCreate);
     createSection.appendChild(createBtn);
     card.appendChild(createSection);
+
+    const errorText = document.createElement('div');
+    errorText.className = 'rd-party-error';
+    errorText.textContent = errorMsg;
+    card.appendChild(errorText);
+
+    const listSection = document.createElement('div');
+    listSection.className = 'rd-party-section';
+    const listTitle = document.createElement('div');
+    listTitle.className = 'rd-party-section-title';
+    listTitle.textContent = `지금 열려 있는 방 (${openRooms.length})`;
+    listSection.appendChild(listTitle);
+
+    if (openRooms.length === 0) {
+      const emptyHint = document.createElement('div');
+      emptyHint.className = 'rd-party-room-list-empty';
+      emptyHint.textContent = '열려 있는 방이 없어요. 방을 직접 만들어보세요!';
+      listSection.appendChild(emptyHint);
+    } else {
+      const list = document.createElement('div');
+      list.className = 'rd-party-room-list';
+      openRooms.forEach((room) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'rd-party-room-item';
+        item.disabled = busy;
+
+        const codeSpan = document.createElement('span');
+        codeSpan.className = 'rd-party-room-item-code';
+        codeSpan.textContent = room.code;
+        item.appendChild(codeSpan);
+
+        const infoSpan = document.createElement('span');
+        infoSpan.className = 'rd-party-room-item-info';
+        infoSpan.textContent = `${room.hostNickname} · ${modeLabel(room.mode)} · ${room.maxSize}인`;
+        item.appendChild(infoSpan);
+
+        item.addEventListener('click', () => handleJoin(room.code));
+        list.appendChild(item);
+      });
+      listSection.appendChild(list);
+    }
+    card.appendChild(listSection);
 
     const joinSection = document.createElement('div');
     joinSection.className = 'rd-party-section';
@@ -465,7 +600,7 @@ export function mountPartyOverlay(
 
     const codeInput = document.createElement('input');
     codeInput.type = 'text';
-    codeInput.maxLength = 5;
+    codeInput.maxLength = 8;
     codeInput.placeholder = '방 코드';
     codeInput.value = codeInputValue;
     codeInput.addEventListener('input', () => {
@@ -483,11 +618,6 @@ export function mountPartyOverlay(
 
     joinSection.appendChild(row);
     card.appendChild(joinSection);
-
-    const errorText = document.createElement('div');
-    errorText.className = 'rd-party-error';
-    errorText.textContent = errorMsg;
-    card.appendChild(errorText);
   }
 
   function renderWaiting(card: HTMLDivElement): void {
@@ -564,6 +694,7 @@ export function mountPartyOverlay(
 
   function unmount(leaveChannel = true): void {
     if (leaveChannel) leavePartyRoom();
+    disconnectLobby();
     overlay.remove();
   }
 

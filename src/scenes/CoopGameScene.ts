@@ -53,11 +53,32 @@ import {
   getLatestMembers,
   setChatHandler,
   broadcastChat,
+  setAuraHandler,
+  broadcastAura,
+  type DamageEventPayload,
+  type AuraPayload,
   type PartyMember,
   type MonsterSyncPayload,
 } from '../meta/party';
 import { mountChatOverlay, type ChatHandle } from '../core/chatOverlay';
 import { px } from '../core/dpr';
+import { effectiveSpeedMultiplier, type StatusEffects } from '../core/combat';
+import {
+  attackTargetCount,
+  applyFrostAura,
+  computeBuffBonuses,
+  frostAuraValue,
+  goldGenInfo,
+  nearestMonsters,
+  resolveHit,
+  rollManaLeech,
+  statusFlags,
+  tickMonsterStatus,
+  type BuffSource,
+  type FxMonster,
+  type HitResult,
+} from '../core/effectsEngine';
+import { drawStatusRings } from '../core/statusRings';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
@@ -74,9 +95,13 @@ interface HostMonster {
   maxHp: number;
   crawlSpeed: number;
   sprite: Phaser.GameObjects.Image;
+  x: number;
+  y: number;
+  status: StatusEffects;
 }
 
 interface GuestMonster {
+  flags: number;
   sprite: Phaser.GameObjects.Image;
   fromT: number;
   toT: number;
@@ -94,8 +119,8 @@ interface CoopPlacedUnit {
 // 뚫리면) 파티 전체가 함께 전투를 종료하고 보상을 나눠 받는다. 몬스터 길과 체력이
 // 파티 전체가 공유하는 하나뿐이라 "나만 뚫리는" 상황이 없기 때문에, 개인별로
 // 나누지 않고 다 같이 끝내는 것으로 정했다 (CLAUDE.md 11장 참고).
-// 아직 합성·강화·직업별 특수 효과(독/기절/광역 등)는 연결 안 됨 — 기본 단일
-// 공격 피해만 적용된다.
+// 유닛 특수 효과(감속·기절·독·광역 등)는 core/effectsEngine.ts가 계산한다. 아직 합성·
+// 강화는 연결 안 됨.
 export class CoopGameScene extends Phaser.Scene {
   private isHost = false;
   private boardReady = false;
@@ -109,6 +134,8 @@ export class CoopGameScene extends Phaser.Scene {
   private waveState: WaveState = createInitialWaveState();
 
   private hostMonsters: HostMonster[] = [];
+  private statusGraphics?: Phaser.GameObjects.Graphics;
+  private auraSendClock = 0;
   private nextMonsterId = 1;
   private spawnTimer?: Phaser.Time.TimerEvent;
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
@@ -181,7 +208,8 @@ export class CoopGameScene extends Phaser.Scene {
     });
 
     if (this.isHost) {
-      setDamageHandler((payload) => this.applyDamage(payload.monsterId, payload.amount));
+      setDamageHandler((payload) => this.handleRemoteHit(payload));
+      setAuraHandler((payload) => this.handleRemoteAura(payload));
       this.currentMap = pickRandomMapPreset();
       this.layout();
       this.boardReady = true;
@@ -225,13 +253,25 @@ export class CoopGameScene extends Phaser.Scene {
   private updateHostMonsters(dt: number): void {
     const pathLength = this.monsterPath.getLength();
 
-    this.hostMonsters.forEach((m) => {
-      const pxPerSec = m.crawlSpeed * this.boardStep;
+    // 독 피해로 몬스터가 죽어도 반복 중에 목록이 꼬이지 않도록 사본으로 돈다.
+    [...this.hostMonsters].forEach((m) => {
+      const poison = tickMonsterStatus(m, dt);
+      if (poison > 0) {
+        this.spawnFloatingText(m.x, m.y, `-${poison}`, '#8ee08e');
+        this.applyDamage(m.id, poison);
+        if (!this.hostMonsters.includes(m)) return;
+      }
+
+      const pxPerSec = m.crawlSpeed * this.boardStep * effectiveSpeedMultiplier(m.status);
       const tStep = pathLength > 0 ? (pxPerSec * dt) / pathLength : 0;
       m.t = Math.min(1, m.t + tStep);
       const point = this.monsterPath.getPoint(m.t);
+      m.x = point.x;
+      m.y = point.y;
       m.sprite.setPosition(point.x, point.y);
     });
+
+    this.drawRings(this.hostMonsters.map((m) => ({ x: m.x, y: m.y, flags: statusFlags(m.status) })));
 
     // 끝까지 도달한 몬스터는 사라지지 않고 필드 끝에 계속 쌓인다(솔로 모드와 동일).
     // 처치하지 않고 방치하면 결국 자리가 꽉 차서 필드가 뚫린다.
@@ -254,6 +294,10 @@ export class CoopGameScene extends Phaser.Scene {
       const point = this.monsterPath.getPoint(t);
       entry.sprite.setPosition(point.x, point.y);
     });
+
+    this.drawRings(
+      Array.from(this.guestMonsters.values()).map((entry) => ({ x: entry.sprite.x, y: entry.sprite.y, flags: entry.flags })),
+    );
   }
 
   private interpolatedT(entry: GuestMonster, now: number): number {
@@ -432,9 +476,43 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   // ----- 전투: 내가 배치한 유닛이 공유 몬스터를 공격 -----
-  // 이번 단계는 기본 단일 공격 피해만 다룬다 (특성/광역/상태이상은 다음에).
+  // 방장은 자기 몬스터 목록에 직접 효과(감속·기절·독·광역 등)를 적용한다. 파티원은
+  // "어떤 유닛으로 어느 몬스터를 때렸는지"를 방장에게 보내고, 방장이 대신 적용한 결과
+  // (체력, 상태이상 링)를 몬스터 위치 정보와 함께 다시 받아서 그린다.
+
+  private fxGeometry(): { cellSize: number; boardStep: number } {
+    return { cellSize: this.cellSize, boardStep: this.boardStep };
+  }
+
+  private buffSources(): BuffSource[] {
+    const sources: BuffSource[] = [];
+    this.placedUnits.forEach((placed, index) => {
+      const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
+      if (cell) sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y });
+    });
+    return sources;
+  }
+
+  // 파티원 화면의 몬스터를 엔진이 다룰 수 있는 모양으로 바꾼다(체력·상태는 방장 소관이라 자리표시).
+  private guestTargets(): Array<FxMonster & { sprite: Phaser.GameObjects.Image }> {
+    return Array.from(this.guestMonsters, ([id, entry]) => ({
+      id,
+      x: entry.sprite.x,
+      y: entry.sprite.y,
+      hp: 1,
+      maxHp: 1,
+      status: {},
+      sprite: entry.sprite,
+    }));
+  }
 
   private updateCombat(dt: number, isHost: boolean): void {
+    const sources = this.buffSources();
+    const buffBonuses = computeBuffBonuses(sources, this.boardStep);
+    const guestTargets = isHost ? [] : this.guestTargets();
+
+    this.updateFrostAuras(sources, dt, isHost, guestTargets);
+
     this.placedUnits.forEach((placed, index) => {
       placed.cooldown -= dt;
       if (placed.cooldown > 0) return;
@@ -442,63 +520,137 @@ export class CoopGameScene extends Phaser.Scene {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
+      const gold = goldGenInfo(placed.unit);
+      if (gold) {
+        placed.cooldown = gold.interval;
+        this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
+        this.refreshHud();
+        this.spawnFloatingText(cell.x, cell.y, `+${gold.value}마나`, '#9adfa0');
+        return;
+      }
+
       if (placed.unit.attack <= 0 || placed.unit.attackSpeed <= 0) {
         placed.cooldown = 1;
         return;
       }
 
       const rangePx = placed.unit.range * this.boardStep;
-      const target = isHost
-        ? this.findNearestHostMonster(cell.x, cell.y, rangePx)
-        : this.findNearestGuestMonster(cell.x, cell.y, rangePx);
-      if (!target) return;
+      const count = attackTargetCount(placed.unit);
+      const targets: FxMonster[] = isHost
+        ? nearestMonsters(this.hostMonsters, cell.x, cell.y, rangePx, count)
+        : nearestMonsters(guestTargets, cell.x, cell.y, rangePx, count);
+      if (targets.length === 0) return;
 
-      placed.cooldown = 1 / placed.unit.attackSpeed;
+      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + (buffBonuses.get(index) ?? 0)));
+
+      targets.forEach((target) => {
+        const mana = rollManaLeech(placed.unit);
+        if (mana > 0) {
+          this.economy = { ...this.economy, mana: this.economy.mana + mana };
+          this.refreshHud();
+        }
+
+        if (isHost) {
+          const hostTarget = target as HostMonster;
+          // 같은 공격에서 앞선 대상의 광역·연쇄로 이미 죽은 몬스터는 건너뛴다.
+          if (!this.hostMonsters.includes(hostTarget)) return;
+          this.applyHitResult(resolveHit(hostTarget, placed.unit, placed.unit.attack, this.hostMonsters, this.fxGeometry()));
+        } else {
+          broadcastDamage({
+            monsterId: target.id,
+            amount: placed.unit.attack,
+            from: this.nickname,
+            unitId: placed.unit.id,
+          });
+          this.spawnFloatingText(target.x, target.y, `-${placed.unit.attack}`, '#fff5d6');
+        }
+      });
+    });
+  }
+
+  // 냉기 결계: 방장은 직접 적용하고, 파티원은 0.3초마다 사거리 안 몬스터 번호를 방장에게 알린다.
+  private updateFrostAuras(
+    sources: BuffSource[],
+    dt: number,
+    isHost: boolean,
+    guestTargets: Array<FxMonster & { sprite: Phaser.GameObjects.Image }>,
+  ): void {
+    this.auraSendClock += dt;
+    const shouldSend = this.auraSendClock >= 0.3;
+    if (shouldSend) this.auraSendClock = 0;
+
+    sources.forEach((source) => {
+      const value = frostAuraValue(source.unit);
+      if (value === null) return;
+      const rangePx = source.unit.range * this.boardStep;
 
       if (isHost) {
-        const hostTarget = target as HostMonster;
-        this.applyDamage(hostTarget.id, placed.unit.attack);
-        this.spawnFloatingText(hostTarget.sprite.x, hostTarget.sprite.y, `-${placed.unit.attack}`, '#fff5d6');
-      } else {
-        const guestTarget = target as { id: number; sprite: Phaser.GameObjects.Image };
-        broadcastDamage({ monsterId: guestTarget.id, amount: placed.unit.attack, from: this.nickname });
-        this.spawnFloatingText(guestTarget.sprite.x, guestTarget.sprite.y, `-${placed.unit.attack}`, '#fff5d6');
+        applyFrostAura(nearestMonsters(this.hostMonsters, source.x, source.y, rangePx, Infinity), value);
+      } else if (shouldSend) {
+        const ids = nearestMonsters(guestTargets, source.x, source.y, rangePx, Infinity).map((m) => m.id);
+        if (ids.length > 0) broadcastAura({ unitId: source.unit.id, monsterIds: ids });
       }
     });
   }
 
-  private findNearestHostMonster(x: number, y: number, rangePx: number): HostMonster | null {
-    let nearest: HostMonster | null = null;
-    let nearestDist = Infinity;
+  // 방장 전용: 파티원이 보낸 공격을 그 유닛의 특수 효과와 함께 적용한다.
+  private handleRemoteHit(payload: DamageEventPayload): void {
+    const target = this.hostMonsters.find((m) => m.id === payload.monsterId);
+    if (!target) return;
 
-    this.hostMonsters.forEach((m) => {
-      const dist = Phaser.Math.Distance.Between(x, y, m.sprite.x, m.sprite.y);
-      if (dist <= rangePx && dist < nearestDist) {
-        nearest = m;
-        nearestDist = dist;
-      }
-    });
+    const unit = payload.unitId ? NORMAL_UNITS.find((u) => u.id === payload.unitId) : undefined;
+    if (!unit) {
+      this.applyDamage(payload.monsterId, payload.amount);
+      return;
+    }
 
-    return nearest;
+    this.applyHitResult(resolveHit(target, unit, payload.amount, this.hostMonsters, this.fxGeometry()));
   }
 
-  private findNearestGuestMonster(
-    x: number,
-    y: number,
-    rangePx: number,
-  ): { id: number; sprite: Phaser.GameObjects.Image } | null {
-    let nearest: { id: number; sprite: Phaser.GameObjects.Image } | null = null;
-    let nearestDist = Infinity;
+  // 방장 전용: 파티원 냉기 결계가 알려준 몬스터들에 감속을 건다.
+  private handleRemoteAura(payload: AuraPayload): void {
+    const unit = NORMAL_UNITS.find((u) => u.id === payload.unitId);
+    const value = unit ? frostAuraValue(unit) : null;
+    if (value === null) return;
 
-    this.guestMonsters.forEach((entry, id) => {
-      const dist = Phaser.Math.Distance.Between(x, y, entry.sprite.x, entry.sprite.y);
-      if (dist <= rangePx && dist < nearestDist) {
-        nearest = { id, sprite: entry.sprite };
-        nearestDist = dist;
-      }
+    const ids = new Set(payload.monsterIds);
+    applyFrostAura(
+      this.hostMonsters.filter((m) => ids.has(m.id)),
+      value,
+    );
+  }
+
+  // 방장 전용: 엔진이 계산한 피해를 실제 체력에 반영한다.
+  private applyHitResult(result: HitResult): void {
+    result.damages.forEach((damage) => {
+      const monster = this.hostMonsters.find((m) => m.id === damage.monsterId);
+      if (!monster) return;
+      this.spawnFloatingText(monster.x, monster.y, `-${damage.amount}`, '#fff5d6');
+      this.applyDamage(damage.monsterId, damage.amount);
     });
 
-    return nearest;
+    result.bolts.forEach((bolt) => {
+      const spark = this.add.circle(bolt.fromX, bolt.fromY, px(3), 0x9fd8ff, 1);
+      this.tweens.add({
+        targets: spark,
+        x: bolt.toX,
+        y: bolt.toY,
+        duration: 120,
+        onComplete: () => spark.destroy(),
+      });
+    });
+  }
+
+  // 감속(파랑)·기절(노랑)·독(초록)·방어 감소(빨강) 링.
+  private drawRings(targets: Array<{ x: number; y: number; flags: number }>): void {
+    if (!this.statusGraphics || !this.statusGraphics.active) {
+      this.statusGraphics = this.add.graphics().setDepth(2);
+    }
+    drawStatusRings(
+      this.statusGraphics,
+      targets.filter((t) => t.flags !== 0),
+      this.cellSize * 0.32,
+    );
   }
 
   // 호스트만 호출: 자기 자신의 공격이든, 파티원에게서 전달받은 피해 이벤트든
@@ -575,6 +727,9 @@ export class CoopGameScene extends Phaser.Scene {
       maxHp: hp,
       crawlSpeed: kind.crawlSpeed,
       sprite,
+      x: start.x,
+      y: start.y,
+      status: {},
     });
 
     this.refreshHud();
@@ -595,6 +750,7 @@ export class CoopGameScene extends Phaser.Scene {
         t: m.t,
         hp: m.hp,
         maxHp: m.maxHp,
+        st: statusFlags(m.status),
       })),
     });
   }
@@ -628,6 +784,7 @@ export class CoopGameScene extends Phaser.Scene {
         const point = this.monsterPath.getPoint(m.t);
         sprite.setPosition(point.x, point.y);
         this.guestMonsters.set(m.id, {
+          flags: m.st ?? 0,
           sprite,
           fromT: m.t,
           toT: m.t,
@@ -642,6 +799,7 @@ export class CoopGameScene extends Phaser.Scene {
       // 이번에 실제로 걸린 시간을 다음 보간 구간 길이로 써서, 네트워크가 들쭉날쭉해도
       // "잠깐 멈췄다가 순간이동"하는 대신 실제 도착 속도에 맞춰 계속 흐르게 한다.
       const measuredInterval = Phaser.Math.Clamp(now - existing.snapshotAt, 60, 600);
+      existing.flags = m.st ?? 0;
       existing.fromT = this.interpolatedT(existing, now);
       existing.toT = m.t;
       existing.snapshotAt = now;

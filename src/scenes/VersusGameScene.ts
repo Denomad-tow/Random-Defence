@@ -60,6 +60,22 @@ import {
 } from '../meta/party';
 import { mountChatOverlay, type ChatHandle } from '../core/chatOverlay';
 import { px } from '../core/dpr';
+import { effectiveSpeedMultiplier, type StatusEffects } from '../core/combat';
+import {
+  attackTargetCount,
+  applyFrostAura,
+  computeBuffBonuses,
+  frostAuraValue,
+  goldGenInfo,
+  nearestMonsters,
+  resolveHit,
+  rollManaLeech,
+  statusFlags,
+  tickMonsterStatus,
+  type BuffSource,
+  type HitResult,
+} from '../core/effectsEngine';
+import { drawStatusRings } from '../core/statusRings';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
@@ -76,6 +92,9 @@ interface MyMonster {
   crawlSpeed: number;
   isGift: boolean;
   sprite: Phaser.GameObjects.Image;
+  x: number;
+  y: number;
+  status: StatusEffects;
 }
 
 interface PlacedUnit {
@@ -96,7 +115,8 @@ interface OpponentStatus {
 // 확률로 다른 플레이어에게 몬스터를 보낼 수 있다(core/versusBalance.ts).
 // 내 필드가 뚫리면(몬스터 100마리) 탈락하고, 마지막까지 남은 사람이 승리한다.
 // 균형전 모드에서는 모두 일반 등급 유닛만 써서 그동안 키운 정도의 격차를 줄인다.
-// 협동전과 마찬가지로 합성·강화·직업별 특수 효과는 아직 연결 안 됨.
+// 유닛 특수 효과(감속·기절·독·광역 등)는 core/effectsEngine.ts가 계산한다. 아직 합성·강화는
+// 연결 안 됨.
 export class VersusGameScene extends Phaser.Scene {
   private mode: PartyMode = 'versus-normal';
   private boardReady = false;
@@ -111,6 +131,7 @@ export class VersusGameScene extends Phaser.Scene {
   private waveState: WaveState = createInitialWaveState();
 
   private myMonsters: MyMonster[] = [];
+  private statusGraphics?: Phaser.GameObjects.Graphics;
   private nextMonsterId = 1;
   private spawnTimer?: Phaser.Time.TimerEvent;
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
@@ -211,13 +232,25 @@ export class VersusGameScene extends Phaser.Scene {
   private updateMonsters(dt: number): void {
     const pathLength = this.monsterPath.getLength();
 
-    this.myMonsters.forEach((m) => {
-      const pxPerSec = m.crawlSpeed * this.boardStep;
+    // 독 피해로 몬스터가 죽어도 반복 중에 목록이 꼬이지 않도록 사본으로 돈다.
+    [...this.myMonsters].forEach((m) => {
+      const poison = tickMonsterStatus(m, dt);
+      if (poison > 0) {
+        this.spawnFloatingText(m.x, m.y, `-${poison}`, '#8ee08e');
+        this.applyDamage(m.id, poison);
+        if (!this.myMonsters.includes(m)) return;
+      }
+
+      const pxPerSec = m.crawlSpeed * this.boardStep * effectiveSpeedMultiplier(m.status);
       const tStep = pathLength > 0 ? (pxPerSec * dt) / pathLength : 0;
       m.t = Math.min(1, m.t + tStep);
       const point = this.monsterPath.getPoint(m.t);
+      m.x = point.x;
+      m.y = point.y;
       m.sprite.setPosition(point.x, point.y);
     });
+
+    this.drawStatusMarks();
 
     // 끝까지 도달한 몬스터는 사라지지 않고 필드 끝에 계속 쌓인다(솔로 모드와 동일).
     if (this.myMonsters.length >= MAX_MONSTERS_ON_FIELD) {
@@ -240,7 +273,31 @@ export class VersusGameScene extends Phaser.Scene {
 
   // ----- 전투 -----
 
+  private fxGeometry(): { cellSize: number; boardStep: number } {
+    return { cellSize: this.cellSize, boardStep: this.boardStep };
+  }
+
+  private buffSources(): BuffSource[] {
+    const sources: BuffSource[] = [];
+    this.placedUnits.forEach((placed, index) => {
+      const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
+      if (cell) sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y });
+    });
+    return sources;
+  }
+
   private updateCombat(dt: number): void {
+    const sources = this.buffSources();
+    const buffBonuses = computeBuffBonuses(sources, this.boardStep);
+
+    // 냉기 결계: 사거리 안 몬스터를 계속 느리게 만든다.
+    sources.forEach((source) => {
+      const value = frostAuraValue(source.unit);
+      if (value === null) return;
+      const inRange = nearestMonsters(this.myMonsters, source.x, source.y, source.unit.range * this.boardStep, Infinity);
+      applyFrostAura(inRange, value);
+    });
+
     this.placedUnits.forEach((placed, index) => {
       placed.cooldown -= dt;
       if (placed.cooldown > 0) return;
@@ -248,34 +305,72 @@ export class VersusGameScene extends Phaser.Scene {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
+      const gold = goldGenInfo(placed.unit);
+      if (gold) {
+        placed.cooldown = gold.interval;
+        this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
+        this.refreshHud();
+        this.spawnFloatingText(cell.x, cell.y, `+${gold.value}마나`, '#9adfa0');
+        return;
+      }
+
       if (placed.unit.attack <= 0 || placed.unit.attackSpeed <= 0) {
         placed.cooldown = 1;
         return;
       }
 
       const rangePx = placed.unit.range * this.boardStep;
-      const target = this.findNearestMonster(cell.x, cell.y, rangePx);
-      if (!target) return;
+      const targets = nearestMonsters(this.myMonsters, cell.x, cell.y, rangePx, attackTargetCount(placed.unit));
+      if (targets.length === 0) return;
 
-      placed.cooldown = 1 / placed.unit.attackSpeed;
-      this.applyDamage(target.id, placed.unit.attack);
-      this.spawnFloatingText(target.sprite.x, target.sprite.y, `-${placed.unit.attack}`, '#fff5d6');
+      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + (buffBonuses.get(index) ?? 0)));
+      targets.forEach((target) => this.performAttack(placed.unit, target));
     });
   }
 
-  private findNearestMonster(x: number, y: number, rangePx: number): MyMonster | null {
-    let nearest: MyMonster | null = null;
-    let nearestDist = Infinity;
+  private performAttack(unit: UnitDef, target: MyMonster): void {
+    // 같은 공격에서 앞선 대상의 광역·연쇄로 이미 죽은 몬스터는 건너뛴다.
+    if (!this.myMonsters.includes(target)) return;
 
-    this.myMonsters.forEach((m) => {
-      const dist = Phaser.Math.Distance.Between(x, y, m.sprite.x, m.sprite.y);
-      if (dist <= rangePx && dist < nearestDist) {
-        nearest = m;
-        nearestDist = dist;
-      }
+    const mana = rollManaLeech(unit);
+    if (mana > 0) {
+      this.economy = { ...this.economy, mana: this.economy.mana + mana };
+      this.refreshHud();
+    }
+
+    this.applyHitResult(resolveHit(target, unit, unit.attack, this.myMonsters, this.fxGeometry()));
+  }
+
+  private applyHitResult(result: HitResult): void {
+    result.damages.forEach((damage) => {
+      const monster = this.myMonsters.find((m) => m.id === damage.monsterId);
+      if (!monster) return;
+      this.spawnFloatingText(monster.x, monster.y, `-${damage.amount}`, '#fff5d6');
+      this.applyDamage(damage.monsterId, damage.amount);
     });
 
-    return nearest;
+    result.bolts.forEach((bolt) => {
+      const spark = this.add.circle(bolt.fromX, bolt.fromY, px(3), 0x9fd8ff, 1);
+      this.tweens.add({
+        targets: spark,
+        x: bolt.toX,
+        y: bolt.toY,
+        duration: 120,
+        onComplete: () => spark.destroy(),
+      });
+    });
+  }
+
+  // 감속(파랑)·기절(노랑)·독(초록)·방어 감소(빨강) 링.
+  private drawStatusMarks(): void {
+    if (!this.statusGraphics || !this.statusGraphics.active) {
+      this.statusGraphics = this.add.graphics().setDepth(2);
+    }
+    drawStatusRings(
+      this.statusGraphics,
+      this.myMonsters.map((m) => ({ x: m.x, y: m.y, flags: statusFlags(m.status) })).filter((t) => t.flags !== 0),
+      this.cellSize * 0.32,
+    );
   }
 
   private applyDamage(monsterId: number, amount: number): void {
@@ -329,6 +424,9 @@ export class VersusGameScene extends Phaser.Scene {
       crawlSpeed: MONSTER_KINDS[kind].crawlSpeed,
       isGift: true,
       sprite,
+      x: start.x,
+      y: start.y,
+      status: {},
     });
 
     this.spawnFloatingText(start.x, start.y, `${from}님이 보냄!`, '#ff9a9a');
@@ -394,6 +492,9 @@ export class VersusGameScene extends Phaser.Scene {
       crawlSpeed: kind.crawlSpeed,
       isGift: false,
       sprite,
+      x: start.x,
+      y: start.y,
+      status: {},
     });
 
     this.refreshHud();

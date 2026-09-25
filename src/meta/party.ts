@@ -24,6 +24,7 @@ export interface MonsterSnapshot {
   t: number; // 길을 따라 이동한 진행도 (0~1)
   hp: number;
   maxHp: number;
+  st?: number; // 상태이상 표시 비트(파티원 화면에 감속·기절·독·방어 감소 링을 그릴 때 씀)
 }
 
 export interface MonsterSyncPayload {
@@ -36,6 +37,14 @@ export interface DamageEventPayload {
   monsterId: number;
   amount: number;
   from: string; // 누가 때렸는지(닉네임). 나중에 기여도 보상 계산에 쓸 수 있다.
+  unitId?: string; // 어떤 유닛이 때렸는지. 방장이 그 유닛의 특수 효과(감속·광역 등)를 적용한다.
+}
+
+// 냉기 결계처럼 "사거리 안 몬스터를 계속 느리게" 하는 유닛은 몬스터 위치를 아는 방장이
+// 대신 적용해야 해서, 파티원이 자기 사거리 안에 있는 몬스터 번호를 주기적으로 알려준다.
+export interface AuraPayload {
+  unitId: string;
+  monsterIds: number[];
 }
 
 export interface KillRewardPayload {
@@ -116,6 +125,7 @@ let versusGiftHandler: (payload: VersusGiftPayload) => void = () => {};
 let versusEliminatedHandler: (payload: VersusEliminatedPayload) => void = () => {};
 let versusWinHandler: (payload: VersusWinPayload) => void = () => {};
 let chatHandler: (payload: ChatPayload) => void = () => {};
+let auraHandler: (payload: AuraPayload) => void = () => {};
 
 function membersFromPresence(): PartyMember[] {
   if (!channel) return [];
@@ -149,6 +159,7 @@ function connect(
   versusEliminatedHandler = () => {};
   versusWinHandler = () => {};
   chatHandler = () => {};
+  auraHandler = () => {};
   // roomFullHandler는 leaveRoom()에서 지우지 않는다 — 정원 초과로 스스로 나갈 때
   // leaveRoom()을 호출한 "다음"에 이 핸들러를 불러야 하기 때문.
 
@@ -221,6 +232,10 @@ function connect(
     chatHandler(msg.payload as ChatPayload);
   });
 
+  channel.on('broadcast', { event: 'aura' }, (msg) => {
+    auraHandler(msg.payload as AuraPayload);
+  });
+
   return new Promise((resolve, reject) => {
     channel!.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -276,6 +291,7 @@ export function leaveRoom(): void {
   versusEliminatedHandler = () => {};
   versusWinHandler = () => {};
   chatHandler = () => {};
+  auraHandler = () => {};
   // roomFullHandler는 여기서 지우지 않는다 — 정원 초과로 나갈 때는 leaveRoom() 안에서
   // 호출한 뒤 곧바로 이 핸들러로 알려줘야 하기 때문에, 연결 하나에 묶이지 않는다.
 }
@@ -417,6 +433,14 @@ export function disconnectLobby(): void {
     void supabase.removeChannel(lobbyChannel);
     lobbyChannel = null;
   }
+}
+
+export function setAuraHandler(handler: (payload: AuraPayload) => void): void {
+  auraHandler = handler;
+}
+
+export function broadcastAura(payload: AuraPayload): void {
+  channel?.send({ type: 'broadcast', event: 'aura', payload });
 }
 
 export function isRoomHost(): boolean {

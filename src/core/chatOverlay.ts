@@ -79,6 +79,17 @@ function injectStyle(): void {
       cursor: pointer;
       padding: 4px 8px;
     }
+    .rd-chat-online {
+      padding: 7px 14px;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: #a8ffb0;
+      border-bottom: 1px solid rgba(212, 179, 106, 0.2);
+      max-height: 56px;
+      overflow-y: auto;
+      flex-shrink: 0;
+      word-break: break-word;
+    }
     .rd-chat-list {
       flex: 1;
       overflow-y: auto;
@@ -145,6 +156,8 @@ function injectStyle(): void {
 
 export interface ChatHandle {
   addMessage(nickname: string, message: string, isMine: boolean, silent?: boolean): void;
+  // 공용 채팅처럼 "지금 접속 중인 사람" 목록을 채팅창 위쪽에 보여주고 싶을 때만 쓴다.
+  setOnline(nicknames: string[], myNickname: string): void;
   destroy(): void;
 }
 
@@ -179,6 +192,11 @@ export function mountChatOverlay(onSend: (message: string) => void): ChatHandle 
   closeBtn.className = 'rd-chat-close';
   closeBtn.textContent = '✕';
   header.appendChild(closeBtn);
+
+  const onlineBar = document.createElement('div');
+  onlineBar.className = 'rd-chat-online';
+  onlineBar.style.display = 'none';
+  panel.appendChild(onlineBar);
 
   const list = document.createElement('div');
   list.className = 'rd-chat-list';
@@ -249,6 +267,13 @@ export function mountChatOverlay(onSend: (message: string) => void): ChatHandle 
         badge.textContent = String(unread);
         badge.style.display = 'flex';
       }
+    },
+    setOnline(nicknames, myNickname) {
+      const others = nicknames.filter((n) => n !== myNickname).sort();
+      const names = [...others, ...(nicknames.includes(myNickname) ? [`${myNickname}(나)`] : [])];
+      onlineBar.style.display = 'block';
+      onlineBar.textContent =
+        names.length > 0 ? `🟢 접속 중 ${names.length}명: ${names.join(', ')}` : '🟢 접속 중인 사람이 없어요';
     },
     destroy() {
       toggleBtn.remove();

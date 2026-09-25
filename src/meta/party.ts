@@ -14,6 +14,7 @@ export interface PartyMember {
   isHost: boolean;
   joinedAt: number;
   maxSize?: number; // 방장 항목에만 있음: 이 방이 받을 수 있는 최대 인원(2~5)
+  mode?: PartyMode; // 방장 항목에만 있음: 이 방의 게임 모드
 }
 
 export interface MonsterSnapshot {
@@ -49,6 +50,35 @@ export interface GameSpeedPayload {
   value: number; // 1/2/4/8
 }
 
+// coop = 협동전(몬스터 체력 공유), versus-normal = 경쟁전 일반(내 덱 그대로),
+// versus-balanced = 경쟁전 균형(모두 일반 등급 유닛만 사용해서 격차를 줄임)
+export type PartyMode = 'coop' | 'versus-normal' | 'versus-balanced';
+
+export interface StartPayload {
+  mode: PartyMode;
+}
+
+export interface VersusStatusPayload {
+  nickname: string;
+  stage: number;
+  pileCount: number; // 필드에 쌓인 몬스터 수 (많을수록 위험)
+}
+
+export interface VersusGiftPayload {
+  targetNickname: string; // 이 사람 필드에만 몬스터가 추가된다
+  kind: string; // MonsterKindId
+  from: string;
+}
+
+export interface VersusEliminatedPayload {
+  nickname: string;
+  rank: number; // 몇 등으로 탈락했는지 (숫자가 작을수록 늦게 탈락 = 높은 등수)
+}
+
+export interface VersusWinPayload {
+  nickname: string;
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
 const CODE_LENGTH = 5;
 
@@ -58,13 +88,17 @@ let roomCode = '';
 let latestMembers: PartyMember[] = [];
 
 let membersHandler: (members: PartyMember[]) => void = () => {};
-let startHandler: () => void = () => {};
+let startHandler: (payload: StartPayload) => void = () => {};
 let monsterSyncHandler: (payload: MonsterSyncPayload) => void = () => {};
 let damageHandler: (payload: DamageEventPayload) => void = () => {};
 let killRewardHandler: (payload: KillRewardPayload) => void = () => {};
 let gameOverHandler: (payload: GameOverPayload) => void = () => {};
 let gameSpeedHandler: (payload: GameSpeedPayload) => void = () => {};
 let roomFullHandler: () => void = () => {};
+let versusStatusHandler: (payload: VersusStatusPayload) => void = () => {};
+let versusGiftHandler: (payload: VersusGiftPayload) => void = () => {};
+let versusEliminatedHandler: (payload: VersusEliminatedPayload) => void = () => {};
+let versusWinHandler: (payload: VersusWinPayload) => void = () => {};
 
 function randomCode(): string {
   let code = '';
@@ -87,8 +121,9 @@ function connect(
   nickname: string,
   isHost: boolean,
   onMembersChange: (members: PartyMember[]) => void,
-  onStart: () => void,
+  onStart: (payload: StartPayload) => void,
   maxSize?: number,
+  mode?: PartyMode,
 ): Promise<void> {
   leaveRoom();
   roomCode = code;
@@ -100,6 +135,10 @@ function connect(
   killRewardHandler = () => {};
   gameOverHandler = () => {};
   gameSpeedHandler = () => {};
+  versusStatusHandler = () => {};
+  versusGiftHandler = () => {};
+  versusEliminatedHandler = () => {};
+  versusWinHandler = () => {};
   // roomFullHandler는 leaveRoom()에서 지우지 않는다 — 정원 초과로 스스로 나갈 때
   // leaveRoom()을 호출한 "다음"에 이 핸들러를 불러야 하기 때문.
 
@@ -128,8 +167,8 @@ function connect(
     }
   });
 
-  channel.on('broadcast', { event: 'start' }, () => {
-    startHandler();
+  channel.on('broadcast', { event: 'start' }, (msg) => {
+    startHandler(msg.payload as StartPayload);
   });
 
   channel.on('broadcast', { event: 'monster-sync' }, (msg) => {
@@ -152,11 +191,28 @@ function connect(
     gameSpeedHandler(msg.payload as GameSpeedPayload);
   });
 
+  channel.on('broadcast', { event: 'versus-status' }, (msg) => {
+    versusStatusHandler(msg.payload as VersusStatusPayload);
+  });
+
+  channel.on('broadcast', { event: 'versus-gift' }, (msg) => {
+    versusGiftHandler(msg.payload as VersusGiftPayload);
+  });
+
+  channel.on('broadcast', { event: 'versus-eliminated' }, (msg) => {
+    versusEliminatedHandler(msg.payload as VersusEliminatedPayload);
+  });
+
+  channel.on('broadcast', { event: 'versus-win' }, (msg) => {
+    versusWinHandler(msg.payload as VersusWinPayload);
+  });
+
   return new Promise((resolve, reject) => {
     channel!.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         const member: PartyMember = { nickname, isHost, joinedAt: Date.now() };
         if (isHost && maxSize) member.maxSize = maxSize;
+        if (isHost && mode) member.mode = mode;
         void channel!.track(member);
         resolve();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -169,11 +225,12 @@ function connect(
 export async function createRoom(
   nickname: string,
   maxSize: number,
+  mode: PartyMode,
   onMembersChange: (members: PartyMember[]) => void,
-  onStart: () => void,
+  onStart: (payload: StartPayload) => void,
 ): Promise<string> {
   const code = randomCode();
-  await connect(code, nickname, true, onMembersChange, onStart, maxSize);
+  await connect(code, nickname, true, onMembersChange, onStart, maxSize, mode);
   return code;
 }
 
@@ -181,7 +238,7 @@ export async function joinRoom(
   code: string,
   nickname: string,
   onMembersChange: (members: PartyMember[]) => void,
-  onStart: () => void,
+  onStart: (payload: StartPayload) => void,
 ): Promise<void> {
   await connect(code.toUpperCase(), nickname, false, onMembersChange, onStart);
 }
@@ -201,12 +258,16 @@ export function leaveRoom(): void {
   killRewardHandler = () => {};
   gameOverHandler = () => {};
   gameSpeedHandler = () => {};
+  versusStatusHandler = () => {};
+  versusGiftHandler = () => {};
+  versusEliminatedHandler = () => {};
+  versusWinHandler = () => {};
   // roomFullHandler는 여기서 지우지 않는다 — 정원 초과로 나갈 때는 leaveRoom() 안에서
   // 호출한 뒤 곧바로 이 핸들러로 알려줘야 하기 때문에, 연결 하나에 묶이지 않는다.
 }
 
-export function broadcastStart(): void {
-  channel?.send({ type: 'broadcast', event: 'start', payload: {} });
+export function broadcastStart(payload: StartPayload): void {
+  channel?.send({ type: 'broadcast', event: 'start', payload });
 }
 
 export function setMonsterSyncHandler(handler: (payload: MonsterSyncPayload) => void): void {
@@ -255,6 +316,38 @@ export function broadcastGameSpeed(payload: GameSpeedPayload): void {
 
 export function setRoomFullHandler(handler: () => void): void {
   roomFullHandler = handler;
+}
+
+export function setVersusStatusHandler(handler: (payload: VersusStatusPayload) => void): void {
+  versusStatusHandler = handler;
+}
+
+export function broadcastVersusStatus(payload: VersusStatusPayload): void {
+  channel?.send({ type: 'broadcast', event: 'versus-status', payload });
+}
+
+export function setVersusGiftHandler(handler: (payload: VersusGiftPayload) => void): void {
+  versusGiftHandler = handler;
+}
+
+export function broadcastVersusGift(payload: VersusGiftPayload): void {
+  channel?.send({ type: 'broadcast', event: 'versus-gift', payload });
+}
+
+export function setVersusEliminatedHandler(handler: (payload: VersusEliminatedPayload) => void): void {
+  versusEliminatedHandler = handler;
+}
+
+export function broadcastVersusEliminated(payload: VersusEliminatedPayload): void {
+  channel?.send({ type: 'broadcast', event: 'versus-eliminated', payload });
+}
+
+export function setVersusWinHandler(handler: (payload: VersusWinPayload) => void): void {
+  versusWinHandler = handler;
+}
+
+export function broadcastVersusWin(payload: VersusWinPayload): void {
+  channel?.send({ type: 'broadcast', event: 'versus-win', payload });
 }
 
 export function isRoomHost(): boolean {

@@ -7,10 +7,23 @@ import {
   currentRoomCode,
   setRoomFullHandler,
   type PartyMember,
+  type PartyMode,
+  type StartPayload,
 } from '../meta/party';
 
 const PARTY_SIZE_OPTIONS = [2, 3, 4, 5];
 const DEFAULT_PARTY_SIZE = 4;
+
+const PARTY_MODE_OPTIONS: { value: PartyMode; label: string; hint: string }[] = [
+  { value: 'coop', label: '협동전', hint: '몬스터 체력을 다 같이 공유해서 함께 막아요' },
+  { value: 'versus-normal', label: '경쟁전(일반)', hint: '각자 자기 필드에서, 지금까지 키운 덱 그대로 승부해요' },
+  { value: 'versus-balanced', label: '경쟁전(균형)', hint: '각자 자기 필드에서, 모두 같은 조건(일반 등급)으로 승부해요' },
+];
+const DEFAULT_PARTY_MODE: PartyMode = 'coop';
+
+function modeLabel(mode: PartyMode | undefined): string {
+  return PARTY_MODE_OPTIONS.find((m) => m.value === mode)?.label ?? '협동전';
+}
 
 const STYLE_ID = 'rd-party-style';
 
@@ -125,6 +138,45 @@ function injectStyle(): void {
       opacity: 0.5;
       cursor: default;
     }
+    .rd-party-mode-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .rd-party-mode-btn {
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(212, 179, 106, 0.4);
+      background: #0d1018;
+      color: #9a917d;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .rd-party-mode-btn.rd-party-mode-active {
+      border-color: #d4b36a;
+      background: #2a2416;
+    }
+    .rd-party-mode-btn-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: inherit;
+    }
+    .rd-party-mode-btn.rd-party-mode-active .rd-party-mode-btn-label {
+      color: #ffd98a;
+    }
+    .rd-party-mode-btn-hint {
+      font-size: 10.5px;
+      color: #8a8272;
+      margin-top: 2px;
+    }
+    .rd-party-mode-display {
+      text-align: center;
+      font-size: 12px;
+      color: #9fd8ff;
+      margin-bottom: 10px;
+    }
     .rd-party-size-row {
       display: flex;
       gap: 6px;
@@ -220,7 +272,7 @@ function injectStyle(): void {
 export function mountPartyOverlay(
   nickname: string,
   onBack: () => void,
-  onGameStart: () => void,
+  onGameStart: (mode: PartyMode) => void,
 ): { unmount: (leaveChannel?: boolean) => void } {
   injectStyle();
 
@@ -230,6 +282,7 @@ export function mountPartyOverlay(
   let errorMsg = '';
   let codeInputValue = '';
   let selectedMaxSize = DEFAULT_PARTY_SIZE;
+  let selectedMode: PartyMode = DEFAULT_PARTY_MODE;
 
   const overlay = document.createElement('div');
   overlay.className = 'rd-party-overlay';
@@ -247,8 +300,8 @@ export function mountPartyOverlay(
     if (view === 'waiting') render();
   }
 
-  function handleRoomStart(): void {
-    onGameStart();
+  function handleRoomStart(payload: StartPayload): void {
+    onGameStart(payload.mode);
   }
 
   function handleCreate(): void {
@@ -257,7 +310,7 @@ export function mountPartyOverlay(
     errorMsg = '';
     render();
 
-    createRoom(nickname, selectedMaxSize, handleMembersChange, handleRoomStart)
+    createRoom(nickname, selectedMaxSize, selectedMode, handleMembersChange, handleRoomStart)
       .then(() => {
         busy = false;
         view = 'waiting';
@@ -297,8 +350,9 @@ export function mountPartyOverlay(
   }
 
   function handleHostStart(): void {
-    broadcastStart();
-    handleRoomStart();
+    const payload: StartPayload = { mode: selectedMode };
+    broadcastStart(payload);
+    handleRoomStart(payload);
   }
 
   function handleLeave(): void {
@@ -335,12 +389,12 @@ export function mountPartyOverlay(
 
     const title = document.createElement('div');
     title.className = 'rd-party-title';
-    title.textContent = '협동 파티전';
+    title.textContent = '파티전';
     card.appendChild(title);
 
     const subtitle = document.createElement('div');
     subtitle.className = 'rd-party-subtitle';
-    subtitle.textContent = '친구와 같은 방에 모여보세요 (베타)';
+    subtitle.textContent = '친구와 같은 방에서 협동하거나 경쟁해보세요 (베타)';
     card.appendChild(subtitle);
 
     const createSection = document.createElement('div');
@@ -349,6 +403,31 @@ export function mountPartyOverlay(
     createTitle.className = 'rd-party-section-title';
     createTitle.textContent = '방 만들기';
     createSection.appendChild(createTitle);
+
+    const modeRow = document.createElement('div');
+    modeRow.className = 'rd-party-mode-row';
+    PARTY_MODE_OPTIONS.forEach((opt) => {
+      const modeBtn = document.createElement('button');
+      modeBtn.type = 'button';
+      modeBtn.className = `rd-party-mode-btn${opt.value === selectedMode ? ' rd-party-mode-active' : ''}`;
+
+      const label = document.createElement('div');
+      label.className = 'rd-party-mode-btn-label';
+      label.textContent = opt.label;
+      modeBtn.appendChild(label);
+
+      const hint = document.createElement('div');
+      hint.className = 'rd-party-mode-btn-hint';
+      hint.textContent = opt.hint;
+      modeBtn.appendChild(hint);
+
+      modeBtn.addEventListener('click', () => {
+        selectedMode = opt.value;
+        render();
+      });
+      modeRow.appendChild(modeBtn);
+    });
+    createSection.appendChild(modeRow);
 
     const sizeRow = document.createElement('div');
     sizeRow.className = 'rd-party-size-row';
@@ -426,6 +505,12 @@ export function mountPartyOverlay(
     codeHint.className = 'rd-party-code-hint';
     codeHint.textContent = '이 코드를 친구에게 알려주세요';
     card.appendChild(codeHint);
+
+    const roomMode = members.find((m) => m.isHost)?.mode ?? selectedMode;
+    const modeDisplay = document.createElement('div');
+    modeDisplay.className = 'rd-party-mode-display';
+    modeDisplay.textContent = `모드: ${modeLabel(roomMode)}`;
+    card.appendChild(modeDisplay);
 
     const list = document.createElement('ul');
     list.className = 'rd-party-members';

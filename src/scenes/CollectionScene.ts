@@ -220,10 +220,12 @@ export class CollectionScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(x, y + buttonHeight * 0.3, `중복${cost.duplicates}·골드${cost.gold}`, {
+      .text(x, y + buttonHeight * 0.34, `중복${cost.duplicates}·골드${cost.gold}`, {
         fontFamily: TITLE_FONT,
-        fontSize: `${costFontSize}px`,
-        color: '#8a8272',
+        fontSize: `${costFontSize * 1.5}px`,
+        color: canAfford ? '#ffe9b0' : '#b0a480',
+        align: 'center',
+        wordWrap: { width: buttonWidth * 0.95 },
       })
       .setOrigin(0.5);
 

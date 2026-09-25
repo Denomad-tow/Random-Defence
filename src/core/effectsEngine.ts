@@ -84,10 +84,11 @@ export function attackTargetCount(unit: UnitDef): number {
   return multishot ? num(multishot.count, 2) : 1;
 }
 
-function applyStatusEffect(target: FxMonster, effect: UnitEffect, rand: () => number): void {
+// magnitude: 연구(직업 레벨) 등으로 커진 효과 배율. 감속·독·방어 감소의 수치에만 곱한다.
+function applyStatusEffect(target: FxMonster, effect: UnitEffect, magnitude: number, rand: () => number): void {
   switch (effect.type) {
     case 'slow':
-      target.status = applySlow(target.status, num(effect.value, 0), num(effect.duration, 0));
+      target.status = applySlow(target.status, num(effect.value, 0) * magnitude, num(effect.duration, 0));
       break;
     case 'stun':
       if (rand() < num(effect.chance, 0)) {
@@ -95,10 +96,10 @@ function applyStatusEffect(target: FxMonster, effect: UnitEffect, rand: () => nu
       }
       break;
     case 'poison':
-      target.status = applyPoison(target.status, num(effect.value, 0), num(effect.duration, 0));
+      target.status = applyPoison(target.status, num(effect.value, 0) * magnitude, num(effect.duration, 0));
       break;
     case 'armorBreak':
-      target.status = applyArmorBreak(target.status, num(effect.value, 0), num(effect.duration, 0));
+      target.status = applyArmorBreak(target.status, num(effect.value, 0) * magnitude, num(effect.duration, 0));
       break;
     default:
       break;
@@ -137,6 +138,7 @@ export function resolveHit(
   attack: number,
   monsters: FxMonster[],
   geo: FxGeometry,
+  magnitude = 1,
   rand: () => number = Math.random,
 ): HitResult {
   const damages: FxDamage[] = [];
@@ -147,14 +149,14 @@ export function resolveHit(
   unit.effects
     .filter((effect) => STATUS_TYPES.includes(effect.type))
     .forEach((effect) => {
-      applyStatusEffect(target, effect, rand);
+      applyStatusEffect(target, effect, magnitude, rand);
 
       const extra = num(effect.targets, 1) - 1;
       if (extra > 0) {
         nearestMonsters(monsters, target.x, target.y, geo.cellSize * EXTRA_TARGET_RANGE_CELLS, extra + 1)
           .filter((m) => m !== target)
           .slice(0, extra)
-          .forEach((m) => applyStatusEffect(m, effect, rand));
+          .forEach((m) => applyStatusEffect(m, effect, magnitude, rand));
       }
     });
 
@@ -217,16 +219,16 @@ export function rollManaLeech(unit: UnitDef, rand: () => number = Math.random): 
 }
 
 // 골드 생성(마나 생성) 유닛의 주기와 양. 해당 유닛이 아니면 null.
-export function goldGenInfo(unit: UnitDef): { interval: number; value: number } | null {
+export function goldGenInfo(unit: UnitDef, multiplier = 1): { interval: number; value: number } | null {
   const effect = findEffect(unit, 'goldGen');
   if (!effect) return null;
-  return { interval: num(effect.interval, 2), value: Math.round(num(effect.value, 1)) };
+  return { interval: num(effect.interval, 2), value: Math.round(num(effect.value, 1) * multiplier) };
 }
 
 // 냉기 결계 유닛의 감속량. 해당 유닛이 아니면 null.
-export function frostAuraValue(unit: UnitDef): number | null {
+export function frostAuraValue(unit: UnitDef, multiplier = 1): number | null {
   const effect = findEffect(unit, 'frostAura');
-  return effect ? num(effect.value, 0.2) : null;
+  return effect ? num(effect.value, 0.2) * multiplier : null;
 }
 
 // 냉기 결계: 사거리 안 몬스터를 아주 짧게(0.4초) 계속 갱신하며 느리게 만든다.
@@ -241,6 +243,7 @@ export interface BuffSource {
   unit: UnitDef;
   x: number;
   y: number;
+  multiplier?: number; // 이 유닛의 강화·레벨·연구 배율(버프·냉기 결계 수치에 곱함)
 }
 
 // 버프 유닛 주변(사거리 안) 아군 유닛이 받는 공격속도 보너스(칸 번호 -> 보너스 합).
@@ -251,7 +254,7 @@ export function computeBuffBonuses(units: BuffSource[], boardStep: number): Map<
     const effect = findEffect(buffer.unit, 'buff');
     if (!effect) return;
 
-    const value = num(effect.value, 0);
+    const value = num(effect.value, 0) * (buffer.multiplier ?? 1);
     const rangePx = buffer.unit.range * boardStep;
 
     units.forEach((ally) => {

@@ -38,6 +38,7 @@ export interface DamageEventPayload {
   amount: number;
   from: string; // 누가 때렸는지(닉네임). 나중에 기여도 보상 계산에 쓸 수 있다.
   unitId?: string; // 어떤 유닛이 때렸는지. 방장이 그 유닛의 특수 효과(감속·광역 등)를 적용한다.
+  magnitude?: number; // 그 유닛의 연구(직업 레벨) 배율. 감속·독 수치에 곱한다.
 }
 
 // 냉기 결계처럼 "사거리 안 몬스터를 계속 느리게" 하는 유닛은 몬스터 위치를 아는 방장이
@@ -45,6 +46,7 @@ export interface DamageEventPayload {
 export interface AuraPayload {
   unitId: string;
   monsterIds: number[];
+  multiplier?: number; // 냉기 결계 유닛의 강화·레벨·연구 배율
 }
 
 export interface KillRewardPayload {

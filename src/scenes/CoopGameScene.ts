@@ -12,12 +12,9 @@ import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } 
 import { coopHpMultiplier } from '../core/coopBalance';
 import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, MAP_PRESETS, type MapPreset } from '../core/mapPresets';
-import { NORMAL_UNITS, pickRandomUnit, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, type UnitDef } from '../core/units';
 import {
   createInitialEconomy,
-  currentSummonCost,
-  canAffordSummon,
-  spendForSummon,
   type EconomyState,
 } from '../core/economy';
 import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
@@ -26,14 +23,11 @@ import { computeRunReward, type RunReward } from '../meta/rewards';
 import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
 import { getBoxType } from '../meta/gacha';
-import { getRarity } from '../core/graphics/gem';
-import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
   createNightSkyGlowTexture,
   createStarFieldTexture,
   createMonsterTexture,
   createSlotTexture,
-  createGemTexture,
 } from '../core/graphics/texture';
 import type { MonsterShapeId } from '../core/graphics/monster';
 import {
@@ -79,6 +73,8 @@ import {
   type HitResult,
 } from '../core/effectsEngine';
 import { drawStatusRings } from '../core/statusRings';
+import { PlayerField } from '../core/playerField';
+import { playProjectile, spawnDeathBurst } from '../core/combatVfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
@@ -107,12 +103,6 @@ interface GuestMonster {
   toT: number;
   snapshotAt: number;
   intervalMs: number;
-}
-
-interface CoopPlacedUnit {
-  unit: UnitDef;
-  cooldown: number;
-  sprite: Phaser.GameObjects.Image;
 }
 
 // 5단계(협동 파티전) 실시간 동기화 3번째 조각: 몬스터가 너무 많이 쌓이면(필드가
@@ -145,7 +135,8 @@ export class CoopGameScene extends Phaser.Scene {
   private guestMonsters = new Map<number, GuestMonster>();
 
   private economy: EconomyState = createInitialEconomy();
-  private placedUnits = new Map<number, CoopPlacedUnit>();
+  private field!: PlayerField;
+  private rangeToggleText?: Phaser.GameObjects.Text;
   private deckUnitIds: string[] = [];
   private nickname = '';
 
@@ -178,7 +169,20 @@ export class CoopGameScene extends Phaser.Scene {
     this.nextMonsterId = 1;
     this.guestMonsters = new Map();
     this.economy = createInitialEconomy();
-    this.placedUnits = new Map();
+    this.field = new PlayerField({
+      scene: this,
+      geometry: () => ({ cells: this.boardCells, cellSize: this.cellSize, boardStep: this.boardStep }),
+      economy: () => this.economy,
+      setEconomy: (next) => {
+        this.economy = next;
+      },
+      onEconomyChange: () => this.refreshHud(),
+      deckPool: () => this.deckPool(),
+      confirm: (options) => this.showConfirmModal(options),
+      floatText: (x, y, message, color) => this.spawnFloatingText(x, y, message, color),
+      useMetaBonuses: true,
+    });
+    this.field.registerDragHandlers();
     this.members = getLatestMembers();
     this.gameSpeed = 1;
     this.time.timeScale = 1;
@@ -486,9 +490,11 @@ export class CoopGameScene extends Phaser.Scene {
 
   private buffSources(): BuffSource[] {
     const sources: BuffSource[] = [];
-    this.placedUnits.forEach((placed, index) => {
+    this.field.placedUnits.forEach((placed, index) => {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
-      if (cell) sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y });
+      if (cell) {
+        sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y, multiplier: this.field.totalMultiplier(placed.unit) });
+      }
     });
     return sources;
   }
@@ -513,14 +519,14 @@ export class CoopGameScene extends Phaser.Scene {
 
     this.updateFrostAuras(sources, dt, isHost, guestTargets);
 
-    this.placedUnits.forEach((placed, index) => {
+    this.field.placedUnits.forEach((placed, index) => {
       placed.cooldown -= dt;
       if (placed.cooldown > 0) return;
 
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      const gold = goldGenInfo(placed.unit);
+      const gold = goldGenInfo(placed.unit, this.field.totalMultiplier(placed.unit));
       if (gold) {
         placed.cooldown = gold.interval;
         this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
@@ -541,10 +547,32 @@ export class CoopGameScene extends Phaser.Scene {
         : nearestMonsters(guestTargets, cell.x, cell.y, rangePx, count);
       if (targets.length === 0) return;
 
-      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + (buffBonuses.get(index) ?? 0)));
+      const bonus = (buffBonuses.get(index) ?? 0) + this.field.attackSpeedBonus();
+      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
 
-      targets.forEach((target) => {
-        const mana = rollManaLeech(placed.unit);
+      targets.forEach((target) => this.performAttack(cell, placed.unit, target, isHost));
+    });
+  }
+
+  // 발사체가 날아가 도착했을 때 효과를 적용한다. 방장은 몬스터가 아직 있을 때만,
+  // 파티원은 방장에게 "이 유닛이 이 몬스터를 때렸다"고 알린다.
+  private performAttack(cell: CellPosition, unit: UnitDef, target: FxMonster, isHost: boolean): void {
+    const attack = this.field.attackOf(unit);
+    const magnitude = this.field.statusMagnitude(unit);
+    const guestEntry = isHost ? undefined : this.guestMonsters.get(target.id);
+
+    playProjectile(
+      this,
+      cell,
+      unit,
+      () => {
+        if (isHost) return this.hostMonsters.includes(target as HostMonster) ? { x: target.x, y: target.y } : null;
+        return guestEntry && this.guestMonsters.get(target.id) === guestEntry
+          ? { x: guestEntry.sprite.x, y: guestEntry.sprite.y }
+          : null;
+      },
+      () => {
+        const mana = rollManaLeech(unit);
         if (mana > 0) {
           this.economy = { ...this.economy, mana: this.economy.mana + mana };
           this.refreshHud();
@@ -552,20 +580,20 @@ export class CoopGameScene extends Phaser.Scene {
 
         if (isHost) {
           const hostTarget = target as HostMonster;
-          // 같은 공격에서 앞선 대상의 광역·연쇄로 이미 죽은 몬스터는 건너뛴다.
           if (!this.hostMonsters.includes(hostTarget)) return;
-          this.applyHitResult(resolveHit(hostTarget, placed.unit, placed.unit.attack, this.hostMonsters, this.fxGeometry()));
+          this.applyHitResult(resolveHit(hostTarget, unit, attack, this.hostMonsters, this.fxGeometry(), magnitude));
         } else {
           broadcastDamage({
             monsterId: target.id,
-            amount: placed.unit.attack,
+            amount: attack,
             from: this.nickname,
-            unitId: placed.unit.id,
+            unitId: unit.id,
+            magnitude,
           });
-          this.spawnFloatingText(target.x, target.y, `-${placed.unit.attack}`, '#fff5d6');
+          this.spawnFloatingText(target.x, target.y, `-${attack}`, '#fff5d6');
         }
-      });
-    });
+      },
+    );
   }
 
   // 냉기 결계: 방장은 직접 적용하고, 파티원은 0.3초마다 사거리 안 몬스터 번호를 방장에게 알린다.
@@ -580,7 +608,7 @@ export class CoopGameScene extends Phaser.Scene {
     if (shouldSend) this.auraSendClock = 0;
 
     sources.forEach((source) => {
-      const value = frostAuraValue(source.unit);
+      const value = frostAuraValue(source.unit, source.multiplier);
       if (value === null) return;
       const rangePx = source.unit.range * this.boardStep;
 
@@ -588,7 +616,7 @@ export class CoopGameScene extends Phaser.Scene {
         applyFrostAura(nearestMonsters(this.hostMonsters, source.x, source.y, rangePx, Infinity), value);
       } else if (shouldSend) {
         const ids = nearestMonsters(guestTargets, source.x, source.y, rangePx, Infinity).map((m) => m.id);
-        if (ids.length > 0) broadcastAura({ unitId: source.unit.id, monsterIds: ids });
+        if (ids.length > 0) broadcastAura({ unitId: source.unit.id, monsterIds: ids, multiplier: source.multiplier });
       }
     });
   }
@@ -604,13 +632,13 @@ export class CoopGameScene extends Phaser.Scene {
       return;
     }
 
-    this.applyHitResult(resolveHit(target, unit, payload.amount, this.hostMonsters, this.fxGeometry()));
+    this.applyHitResult(resolveHit(target, unit, payload.amount, this.hostMonsters, this.fxGeometry(), payload.magnitude ?? 1));
   }
 
   // 방장 전용: 파티원 냉기 결계가 알려준 몬스터들에 감속을 건다.
   private handleRemoteAura(payload: AuraPayload): void {
     const unit = NORMAL_UNITS.find((u) => u.id === payload.unitId);
-    const value = unit ? frostAuraValue(unit) : null;
+    const value = unit ? frostAuraValue(unit, payload.multiplier ?? 1) : null;
     if (value === null) return;
 
     const ids = new Set(payload.monsterIds);
@@ -661,6 +689,7 @@ export class CoopGameScene extends Phaser.Scene {
 
     monster.hp = Math.max(0, monster.hp - amount);
     if (monster.hp <= 0) {
+      spawnDeathBurst(this, monster.x, monster.y, this.cellSize);
       monster.sprite.destroy();
       this.hostMonsters = this.hostMonsters.filter((m) => m.id !== monsterId);
       this.grantMana(monster.kind);
@@ -808,6 +837,7 @@ export class CoopGameScene extends Phaser.Scene {
 
     for (const [id, entry] of this.guestMonsters) {
       if (!seen.has(id)) {
+        spawnDeathBurst(this, entry.sprite.x, entry.sprite.y, this.cellSize);
         entry.sprite.destroy();
         this.guestMonsters.delete(id);
       }
@@ -859,9 +889,11 @@ export class CoopGameScene extends Phaser.Scene {
     this.monsterPath = this.buildCurve(pathPoints);
     this.drawPath(this.monsterPath);
     this.drawFieldSlots(this.boardCells, boardLayout.cellSize);
+    this.field.afterLayout();
 
     this.drawHeader(width, height);
     this.drawSpeedRow(width, headerHeight);
+    this.drawRangeToggle(width, headerHeight * 1.75);
     this.drawSummonButton(width / 2, buttonY, Math.min(boardLayout.cellSize * 3.4, width * 0.6), buttonHeight);
   }
 
@@ -1208,8 +1240,29 @@ export class CoopGameScene extends Phaser.Scene {
     const slotKey = `coop-slot-${Math.round(cellSize)}`;
     createSlotTexture(this, slotKey, Math.round(cellSize));
     cells.forEach((cell) => {
-      this.add.image(cell.x, cell.y, slotKey);
+      this.add
+        .image(cell.x, cell.y, slotKey)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.field.handleCellTap(cell));
     });
+  }
+
+  private drawRangeToggle(width: number, y: number): void {
+    const on = this.field.showRange;
+    this.rangeToggleText = this.add
+      .text(width - px(12), y, on ? '사거리 끄기' : '사거리 보기', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: on ? '#9fd8ff' : '#6a6458',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => {
+        const nowOn = this.field.toggleRange();
+        this.rangeToggleText?.setText(nowOn ? '사거리 끄기' : '사거리 보기');
+        this.rangeToggleText?.setColor(nowOn ? '#9fd8ff' : '#6a6458');
+      });
   }
 
   // ----- 소환 -----
@@ -1230,7 +1283,7 @@ export class CoopGameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         this.pulseButtonPress(this.summonButtonText);
-        this.handleSummonTap();
+        this.field.trySummon();
       });
 
     this.refreshSummonButton();
@@ -1242,14 +1295,10 @@ export class CoopGameScene extends Phaser.Scene {
     this.tweens.add({ targets: target, scale: 0.88, duration: 60, yoyo: true, ease: 'Quad.Out' });
   }
 
-  private hasEmptySlot(): boolean {
-    return this.boardCells.some((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
-  }
-
   private refreshSummonButton(): void {
     if (!this.summonButtonBg || !this.summonButtonText) return;
     const { x, y, w, h } = this.summonButtonGeom;
-    const affordable = canAffordSummon(this.economy) && this.hasEmptySlot();
+    const affordable = this.field.canSummon();
 
     this.summonButtonBg.clear();
     this.summonButtonBg.fillStyle(0x151a28, affordable ? 0.95 : 0.5);
@@ -1257,58 +1306,9 @@ export class CoopGameScene extends Phaser.Scene {
     this.summonButtonBg.lineStyle(px(2), affordable ? 0xd4b36a : 0x555555, 0.9);
     this.summonButtonBg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, px(10));
 
-    const label = this.hasEmptySlot() ? `소환 (${currentSummonCost(this.economy)}마나)` : '필드가 가득 찼어요';
+    const label = this.field.pendingSummon || this.field.hasEmptyCell() ? this.field.summonLabel() : '필드가 가득 찼어요';
     this.summonButtonText.setText(label);
     this.summonButtonText.setColor(affordable ? '#f6e6b4' : '#8a8272');
-  }
-
-  private handleSummonTap(): void {
-    if (!canAffordSummon(this.economy)) return;
-    const emptyCell = this.bestEmptyCell();
-    if (!emptyCell) return;
-
-    this.economy = spendForSummon(this.economy);
-    const unit = pickRandomUnit(this.deckPool());
-    const sprite = this.drawUnitSprite(emptyCell, unit);
-    this.placedUnits.set(cellIndex(emptyCell.row, emptyCell.col), {
-      unit,
-      cooldown: Math.random() * 0.3,
-      sprite,
-    });
-
-    this.refreshHud();
-  }
-
-  // 이번 단계는 칸을 직접 고르는 UI가 없어서, 빈 칸 중 몬스터 길에 가장 가까운
-  // 칸에 자동으로 배치한다 (그래야 소환한 유닛이 실제로 공격할 기회를 잡는다).
-  // 길 전체가 아니라 앞부분(진입 구간)에 가까운 칸을 우선해서, 소환하자마자
-  // 곧 지나가는 몬스터를 때릴 수 있게 한다 (길 끝 쪽에 배치되면 몬스터가 거기까지
-  // 오는 데 시간이 오래 걸려 한참 동안 아무것도 못 때리게 된다).
-  private bestEmptyCell(): CellPosition | null {
-    const empty = this.boardCells.filter((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
-    if (empty.length === 0) return null;
-
-    const earlyPathSamples: { x: number; y: number }[] = [];
-    const sampleCount = 30;
-    for (let i = 0; i <= sampleCount; i += 1) {
-      earlyPathSamples.push(this.monsterPath.getPoint((i / sampleCount) * 0.6));
-    }
-
-    const distanceToPath = (cell: CellPosition): number =>
-      earlyPathSamples.reduce(
-        (min, p) => Math.min(min, Phaser.Math.Distance.Between(cell.x, cell.y, p.x, p.y)),
-        Infinity,
-      );
-
-    return empty.reduce((best, c) => (distanceToPath(c) < distanceToPath(best) ? c : best), empty[0]);
-  }
-
-  private drawUnitSprite(cell: CellPosition, unit: UnitDef): Phaser.GameObjects.Image {
-    const size = Math.round(this.cellSize * 0.86);
-    const sigil = ROLE_SIGILS[unit.role];
-    const key = `coop-unit-${unit.rarity}-${unit.role}-${size}`;
-    createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, size);
-    return this.add.image(cell.x, cell.y, key).setDisplaySize(this.cellSize * 0.86, this.cellSize * 0.86);
   }
 
   private createMonsterSprite(kindId: MonsterKindId, speciesId: string): Phaser.GameObjects.Image {

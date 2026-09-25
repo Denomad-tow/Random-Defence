@@ -12,12 +12,9 @@ import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } 
 import { MAX_MONSTERS_ON_FIELD, GIFT_CHANCE } from '../core/versusBalance';
 import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, type MapPreset } from '../core/mapPresets';
-import { NORMAL_UNITS, pickRandomUnit, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, type UnitDef } from '../core/units';
 import {
   createInitialEconomy,
-  currentSummonCost,
-  canAffordSummon,
-  spendForSummon,
   type EconomyState,
 } from '../core/economy';
 import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
@@ -27,14 +24,11 @@ import { recordVersusResult } from '../meta/versusRanking';
 import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
 import { getBoxType } from '../meta/gacha';
-import { getRarity } from '../core/graphics/gem';
-import { ROLE_SIGILS } from '../core/graphics/sigils';
 import {
   createNightSkyGlowTexture,
   createStarFieldTexture,
   createMonsterTexture,
   createSlotTexture,
-  createGemTexture,
 } from '../core/graphics/texture';
 import type { MonsterShapeId } from '../core/graphics/monster';
 import {
@@ -76,6 +70,8 @@ import {
   type HitResult,
 } from '../core/effectsEngine';
 import { drawStatusRings } from '../core/statusRings';
+import { PlayerField } from '../core/playerField';
+import { playProjectile, spawnDeathBurst } from '../core/combatVfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
@@ -95,12 +91,6 @@ interface MyMonster {
   x: number;
   y: number;
   status: StatusEffects;
-}
-
-interface PlacedUnit {
-  unit: UnitDef;
-  cooldown: number;
-  sprite: Phaser.GameObjects.Image;
 }
 
 interface OpponentStatus {
@@ -138,7 +128,8 @@ export class VersusGameScene extends Phaser.Scene {
   private statusTimer?: Phaser.Time.TimerEvent;
 
   private economy: EconomyState = createInitialEconomy();
-  private placedUnits = new Map<number, PlacedUnit>();
+  private field!: PlayerField;
+  private rangeToggleText?: Phaser.GameObjects.Text;
   private deckUnitIds: string[] = [];
   private nickname = '';
   private chat?: ChatHandle;
@@ -173,7 +164,21 @@ export class VersusGameScene extends Phaser.Scene {
     this.myMonsters = [];
     this.nextMonsterId = 1;
     this.economy = createInitialEconomy();
-    this.placedUnits = new Map();
+    this.field = new PlayerField({
+      scene: this,
+      geometry: () => ({ cells: this.boardCells, cellSize: this.cellSize, boardStep: this.boardStep }),
+      economy: () => this.economy,
+      setEconomy: (next) => {
+        this.economy = next;
+      },
+      onEconomyChange: () => this.refreshHud(),
+      deckPool: () => this.deckPool(),
+      confirm: (options) => this.showConfirmModal(options),
+      floatText: (x, y, message, color) => this.spawnFloatingText(x, y, message, color),
+      // 균형전에서는 그동안 키운 레벨·연구 보너스를 빼서 격차를 줄인다.
+      useMetaBonuses: this.mode !== 'versus-balanced',
+    });
+    this.field.registerDragHandlers();
     this.members = getLatestMembers();
     this.opponents = new Map();
     this.gameSpeed = 1;
@@ -279,9 +284,11 @@ export class VersusGameScene extends Phaser.Scene {
 
   private buffSources(): BuffSource[] {
     const sources: BuffSource[] = [];
-    this.placedUnits.forEach((placed, index) => {
+    this.field.placedUnits.forEach((placed, index) => {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
-      if (cell) sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y });
+      if (cell) {
+        sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y, multiplier: this.field.totalMultiplier(placed.unit) });
+      }
     });
     return sources;
   }
@@ -292,20 +299,20 @@ export class VersusGameScene extends Phaser.Scene {
 
     // 냉기 결계: 사거리 안 몬스터를 계속 느리게 만든다.
     sources.forEach((source) => {
-      const value = frostAuraValue(source.unit);
+      const value = frostAuraValue(source.unit, source.multiplier);
       if (value === null) return;
       const inRange = nearestMonsters(this.myMonsters, source.x, source.y, source.unit.range * this.boardStep, Infinity);
       applyFrostAura(inRange, value);
     });
 
-    this.placedUnits.forEach((placed, index) => {
+    this.field.placedUnits.forEach((placed, index) => {
       placed.cooldown -= dt;
       if (placed.cooldown > 0) return;
 
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      const gold = goldGenInfo(placed.unit);
+      const gold = goldGenInfo(placed.unit, this.field.totalMultiplier(placed.unit));
       if (gold) {
         placed.cooldown = gold.interval;
         this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
@@ -323,22 +330,40 @@ export class VersusGameScene extends Phaser.Scene {
       const targets = nearestMonsters(this.myMonsters, cell.x, cell.y, rangePx, attackTargetCount(placed.unit));
       if (targets.length === 0) return;
 
-      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + (buffBonuses.get(index) ?? 0)));
-      targets.forEach((target) => this.performAttack(placed.unit, target));
+      const bonus = (buffBonuses.get(index) ?? 0) + this.field.attackSpeedBonus();
+      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
+      targets.forEach((target) => this.performAttack(cell, placed.unit, target));
     });
   }
 
-  private performAttack(unit: UnitDef, target: MyMonster): void {
-    // 같은 공격에서 앞선 대상의 광역·연쇄로 이미 죽은 몬스터는 건너뛴다.
-    if (!this.myMonsters.includes(target)) return;
+  // 발사체가 날아가 도착했을 때(그 사이 몬스터가 죽었으면 취소) 효과를 적용한다.
+  private performAttack(cell: CellPosition, unit: UnitDef, target: MyMonster): void {
+    playProjectile(
+      this,
+      cell,
+      unit,
+      () => (this.myMonsters.includes(target) ? { x: target.x, y: target.y } : null),
+      () => {
+        if (!this.myMonsters.includes(target)) return;
 
-    const mana = rollManaLeech(unit);
-    if (mana > 0) {
-      this.economy = { ...this.economy, mana: this.economy.mana + mana };
-      this.refreshHud();
-    }
+        const mana = rollManaLeech(unit);
+        if (mana > 0) {
+          this.economy = { ...this.economy, mana: this.economy.mana + mana };
+          this.refreshHud();
+        }
 
-    this.applyHitResult(resolveHit(target, unit, unit.attack, this.myMonsters, this.fxGeometry()));
+        this.applyHitResult(
+          resolveHit(
+            target,
+            unit,
+            this.field.attackOf(unit),
+            this.myMonsters,
+            this.fxGeometry(),
+            this.field.statusMagnitude(unit),
+          ),
+        );
+      },
+    );
   }
 
   private applyHitResult(result: HitResult): void {
@@ -379,6 +404,7 @@ export class VersusGameScene extends Phaser.Scene {
 
     monster.hp = Math.max(0, monster.hp - amount);
     if (monster.hp <= 0) {
+      spawnDeathBurst(this, monster.x, monster.y, this.cellSize);
       monster.sprite.destroy();
       this.myMonsters = this.myMonsters.filter((m) => m.id !== monsterId);
       this.grantMana(monster.kind);
@@ -745,9 +771,11 @@ export class VersusGameScene extends Phaser.Scene {
     this.monsterPath = this.buildCurve(pathPoints);
     this.drawPath(this.monsterPath);
     this.drawFieldSlots(this.boardCells, boardLayout.cellSize);
+    this.field.afterLayout();
 
     this.drawHeader(width, height);
     this.drawSpeedControls(width / 2, headerHeight * 2.0);
+    this.drawRangeToggle(width, headerHeight * 2.0);
     this.drawSummonButton(width / 2, buttonY, Math.min(boardLayout.cellSize * 3.4, width * 0.6), buttonHeight);
   }
 
@@ -1075,8 +1103,29 @@ export class VersusGameScene extends Phaser.Scene {
     const slotKey = `versus-slot-${Math.round(cellSize)}`;
     createSlotTexture(this, slotKey, Math.round(cellSize));
     cells.forEach((cell) => {
-      this.add.image(cell.x, cell.y, slotKey);
+      this.add
+        .image(cell.x, cell.y, slotKey)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.field.handleCellTap(cell));
     });
+  }
+
+  private drawRangeToggle(width: number, y: number): void {
+    const on = this.field.showRange;
+    this.rangeToggleText = this.add
+      .text(width - px(12), y, on ? '사거리 끄기' : '사거리 보기', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: on ? '#9fd8ff' : '#6a6458',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => {
+        const nowOn = this.field.toggleRange();
+        this.rangeToggleText?.setText(nowOn ? '사거리 끄기' : '사거리 보기');
+        this.rangeToggleText?.setColor(nowOn ? '#9fd8ff' : '#6a6458');
+      });
   }
 
   // ----- 소환 -----
@@ -1097,7 +1146,7 @@ export class VersusGameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         this.pulseButtonPress(this.summonButtonText);
-        this.handleSummonTap();
+        this.field.trySummon();
       });
 
     this.refreshSummonButton();
@@ -1109,14 +1158,10 @@ export class VersusGameScene extends Phaser.Scene {
     this.tweens.add({ targets: target, scale: 0.88, duration: 60, yoyo: true, ease: 'Quad.Out' });
   }
 
-  private hasEmptySlot(): boolean {
-    return this.boardCells.some((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
-  }
-
   private refreshSummonButton(): void {
     if (!this.summonButtonBg || !this.summonButtonText) return;
     const { x, y, w, h } = this.summonButtonGeom;
-    const affordable = canAffordSummon(this.economy) && this.hasEmptySlot();
+    const affordable = this.field.canSummon();
 
     this.summonButtonBg.clear();
     this.summonButtonBg.fillStyle(0x151a28, affordable ? 0.95 : 0.5);
@@ -1124,53 +1169,9 @@ export class VersusGameScene extends Phaser.Scene {
     this.summonButtonBg.lineStyle(px(2), affordable ? 0xd4b36a : 0x555555, 0.9);
     this.summonButtonBg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, px(10));
 
-    const label = this.hasEmptySlot() ? `소환 (${currentSummonCost(this.economy)}마나)` : '필드가 가득 찼어요';
+    const label = this.field.pendingSummon || this.field.hasEmptyCell() ? this.field.summonLabel() : '필드가 가득 찼어요';
     this.summonButtonText.setText(label);
     this.summonButtonText.setColor(affordable ? '#f6e6b4' : '#8a8272');
-  }
-
-  private handleSummonTap(): void {
-    if (!canAffordSummon(this.economy)) return;
-    const emptyCell = this.bestEmptyCell();
-    if (!emptyCell) return;
-
-    this.economy = spendForSummon(this.economy);
-    const unit = pickRandomUnit(this.deckPool());
-    const sprite = this.drawUnitSprite(emptyCell, unit);
-    this.placedUnits.set(cellIndex(emptyCell.row, emptyCell.col), {
-      unit,
-      cooldown: Math.random() * 0.3,
-      sprite,
-    });
-
-    this.refreshHud();
-  }
-
-  private bestEmptyCell(): CellPosition | null {
-    const empty = this.boardCells.filter((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
-    if (empty.length === 0) return null;
-
-    const earlyPathSamples: { x: number; y: number }[] = [];
-    const sampleCount = 30;
-    for (let i = 0; i <= sampleCount; i += 1) {
-      earlyPathSamples.push(this.monsterPath.getPoint((i / sampleCount) * 0.6));
-    }
-
-    const distanceToPath = (cell: CellPosition): number =>
-      earlyPathSamples.reduce(
-        (min, p) => Math.min(min, Phaser.Math.Distance.Between(cell.x, cell.y, p.x, p.y)),
-        Infinity,
-      );
-
-    return empty.reduce((best, c) => (distanceToPath(c) < distanceToPath(best) ? c : best), empty[0]);
-  }
-
-  private drawUnitSprite(cell: CellPosition, unit: UnitDef): Phaser.GameObjects.Image {
-    const size = Math.round(this.cellSize * 0.86);
-    const sigil = ROLE_SIGILS[unit.role];
-    const key = `versus-unit-${unit.rarity}-${unit.role}-${size}`;
-    createGemTexture(this, key, getRarity(unit.rarity), sigil, 1, size);
-    return this.add.image(cell.x, cell.y, key).setDisplaySize(this.cellSize * 0.86, this.cellSize * 0.86);
   }
 
   private createMonsterSprite(kindId: MonsterKindId, speciesId: string, isGift: boolean): Phaser.GameObjects.Image {

@@ -14,6 +14,7 @@ const SYNCED_KEYS = [
   'rd_gacha_pity',
   'rd_research',
   'rd_best_stage',
+  'rd_attendance',
 ];
 
 async function currentUserId(): Promise<string | null> {

@@ -10,6 +10,9 @@ import { loadBoxes } from '../meta/boxes';
 import { sortByRarityThenLevel } from '../meta/unitSort';
 import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
+import { canClaimAttendanceToday, currentAttendanceDay, claimAttendance } from '../meta/attendance';
+import { ATTENDANCE_REWARDS } from '../core/attendanceBalance';
+import { getBoxType } from '../meta/gacha';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -29,6 +32,7 @@ export class DeckSelectScene extends Phaser.Scene {
   private page = 0;
   private nickname = '';
   private nicknameText?: Phaser.GameObjects.Text;
+  private attendanceOpen = false;
 
   constructor() {
     super('deck-select');
@@ -54,12 +58,19 @@ export class DeckSelectScene extends Phaser.Scene {
 
     this.selected = new Set(validSaved.slice(0, DECK_SIZE));
     this.layout();
-    this.scale.on('resize', () => this.layout());
+    this.scale.on('resize', () => {
+      this.layout();
+      if (this.attendanceOpen) this.showAttendanceModal();
+    });
 
     void getCurrentNickname().then((nick) => {
       this.nickname = nick ?? '';
       this.nicknameText?.setText(this.nickname ? `${this.nickname}님` : '');
     });
+
+    if (canClaimAttendanceToday()) {
+      this.showAttendanceModal();
+    }
   }
 
   private switchSlot(index: number): void {
@@ -498,6 +509,152 @@ export class DeckSelectScene extends Phaser.Scene {
     saveDeckSlot(this.activeSlot, deck);
     saveActiveSlot(this.activeSlot);
     this.showToast('덱이 저장되었습니다!');
+  }
+
+  private showAttendanceModal(): void {
+    this.attendanceOpen = true;
+    const { width, height } = this.scale;
+
+    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(600).setInteractive();
+
+    const panelWidth = width * 0.86;
+    const panelHeight = height * 0.46;
+    const panelX = width / 2;
+    const panelY = height / 2;
+
+    const panel = this.add.graphics().setDepth(601);
+    panel.fillStyle(0x151a28, 0.98);
+    panel.fillRoundedRect(panelX - panelWidth / 2, panelY - panelHeight / 2, panelWidth, panelHeight, px(14));
+    panel.lineStyle(px(2.5), 0xd4b36a, 1);
+    panel.strokeRoundedRect(panelX - panelWidth / 2, panelY - panelHeight / 2, panelWidth, panelHeight, px(14));
+
+    this.add
+      .text(panelX, panelY - panelHeight * 0.4, '7일 출석 체크', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(20)}px`,
+        color: '#f6e6b4',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(602);
+
+    const today = currentAttendanceDay();
+    const canClaim = canClaimAttendanceToday();
+
+    const cols = 4;
+    const cellGap = panelWidth * 0.02;
+    const cellSize = (panelWidth * 0.86 - cellGap * (cols - 1)) / cols;
+    const gridTop = panelY - panelHeight * 0.12;
+    const rowGap = cellSize * 0.3;
+
+    ATTENDANCE_REWARDS.forEach((reward, i) => {
+      const day = i + 1;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const rowCount = row === 0 ? cols : ATTENDANCE_REWARDS.length - cols;
+      const rowWidth = cellSize * rowCount + cellGap * (rowCount - 1);
+      const rowStartX = panelX - rowWidth / 2 + cellSize / 2;
+      const x = rowStartX + col * (cellSize + cellGap);
+      const y = gridTop + row * (cellSize + rowGap);
+
+      const claimed = day < today || (day === today && !canClaim);
+      const isToday = day === today && canClaim;
+      const boxColor =
+        reward.boxId === 'diamond' ? '#7ef0ff' : reward.boxId === 'gold' ? '#ffd98a' : reward.boxId === 'silver' ? '#c9d6e0' : '#c9a878';
+
+      const cellBg = this.add.graphics().setDepth(602);
+      cellBg.fillStyle(isToday ? 0x2a2416 : 0x1c2233, isToday ? 1 : 0.85);
+      cellBg.fillRoundedRect(x - cellSize / 2, y - cellSize / 2, cellSize, cellSize, px(8));
+      cellBg.lineStyle(px(isToday ? 2.5 : 1.2), isToday ? 0xffd98a : claimed ? 0x5a7a5a : 0x3a3a3a, 1);
+      cellBg.strokeRoundedRect(x - cellSize / 2, y - cellSize / 2, cellSize, cellSize, px(8));
+
+      this.add
+        .text(x, y - cellSize * 0.3, `${day}일`, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(11)}px`,
+          color: claimed ? '#6a6458' : '#9a917d',
+        })
+        .setOrigin(0.5)
+        .setDepth(603);
+
+      this.add
+        .text(x, y + cellSize * 0.02, getBoxType(reward.boxId).name.replace(' 상자', ''), {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(12)}px`,
+          color: claimed ? '#6a6458' : boxColor,
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5)
+        .setDepth(603);
+
+      this.add
+        .text(x, y + cellSize * 0.32, `x${reward.count}`, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(11)}px`,
+          color: claimed ? '#6a6458' : '#f0e9d8',
+        })
+        .setOrigin(0.5)
+        .setDepth(603);
+
+      if (claimed) {
+        this.add
+          .text(x, y, '✓', { fontFamily: TITLE_FONT, fontSize: `${px(24)}px`, color: '#4a7a4a' })
+          .setOrigin(0.5)
+          .setDepth(604)
+          .setAlpha(0.6);
+      }
+    });
+
+    const btnY = panelY + panelHeight * 0.36;
+    const btnWidth = panelWidth * 0.55;
+    const btnHeight = panelHeight * 0.15;
+
+    const btnBg = this.add.graphics().setDepth(602);
+    btnBg.fillStyle(0x1f2536, 1);
+    btnBg.fillRoundedRect(panelX - btnWidth / 2, btnY - btnHeight / 2, btnWidth, btnHeight, px(10));
+    btnBg.lineStyle(px(2), 0xd4b36a, 1);
+    btnBg.strokeRoundedRect(panelX - btnWidth / 2, btnY - btnHeight / 2, btnWidth, btnHeight, px(10));
+
+    this.add
+      .text(panelX, btnY, canClaim ? `${today}일차 받기` : '오늘 받음', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(16)}px`,
+        color: '#ffd98a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(603);
+
+    if (canClaim) {
+      this.add
+        .zone(panelX, btnY, btnWidth, btnHeight)
+        .setDepth(604)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          const result = claimAttendance();
+          this.attendanceOpen = false;
+          this.layout();
+          if (result) {
+            this.showToast(`${result.day}일차: ${getBoxType(result.reward.boxId).name} ${result.reward.count}개 획득!`);
+          }
+        });
+    }
+
+    const closeX = panelX + panelWidth / 2 - px(22);
+    const closeY = panelY - panelHeight / 2 + px(20);
+    this.add
+      .text(closeX, closeY, '✕', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(18)}px`,
+        color: '#9a917d',
+      })
+      .setOrigin(0.5)
+      .setDepth(603)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.attendanceOpen = false;
+        this.layout();
+      });
   }
 
   private showToast(message: string): void {

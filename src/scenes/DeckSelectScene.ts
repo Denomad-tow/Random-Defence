@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, type UnitDef } from '../core/units';
+import { NORMAL_UNITS, OBTAINABLE_UNITS, DECK_SIZE, ROLE_DESCRIPTIONS, ROLE_CATEGORIES, type UnitDef } from '../core/units';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
 import { createGemTexture } from '../core/graphics/texture';
@@ -18,6 +18,7 @@ import { getBoxType } from '../meta/gacha';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
+const DOUBLE_TAP_WINDOW_MS = 320;
 
 interface CardRef {
   ring: Phaser.GameObjects.Arc;
@@ -35,6 +36,8 @@ export class DeckSelectScene extends Phaser.Scene {
   private nickname = '';
   private nicknameText?: Phaser.GameObjects.Text;
   private attendanceOpen = false;
+  private lastTapId: string | null = null;
+  private lastTapTime = 0;
 
   constructor() {
     super('deck-select');
@@ -349,7 +352,7 @@ export class DeckSelectScene extends Phaser.Scene {
       .image(x, y, key)
       .setDisplaySize(size * 0.86, size * 0.86)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.toggleUnit(unit.id));
+      .on('pointerdown', () => this.registerCardTap(unit));
 
     const count = this.ownedCounts.get(unit.id) ?? 1;
     const nameLabel = count > 1 ? `${unit.name} ×${count}` : unit.name;
@@ -493,6 +496,26 @@ export class DeckSelectScene extends Phaser.Scene {
     showDeleteAccountOverlay(this.nickname);
   }
 
+  // 한 번 탭하면 평소처럼 덱에 넣거나 뺀다. 짧은 시간 안에 같은 유닛을 두 번
+  // 탭하면(더블 탭) 선택 상태는 원래대로 되돌리고, 대신 그 유닛의 도감 정보
+  // 팝업을 띄운다.
+  private registerCardTap(unit: UnitDef): void {
+    const now = this.time.now;
+    const isDoubleTap = this.lastTapId === unit.id && now - this.lastTapTime < DOUBLE_TAP_WINDOW_MS;
+
+    this.toggleUnit(unit.id);
+
+    if (isDoubleTap) {
+      this.lastTapId = null;
+      this.lastTapTime = 0;
+      this.showUnitInfoModal(unit);
+      return;
+    }
+
+    this.lastTapId = unit.id;
+    this.lastTapTime = now;
+  }
+
   private toggleUnit(id: string): void {
     if (this.selected.has(id)) {
       this.selected.delete(id);
@@ -548,6 +571,134 @@ export class DeckSelectScene extends Phaser.Scene {
     saveDeckSlot(this.activeSlot, deck);
     saveActiveSlot(this.activeSlot);
     this.showToast('덱이 저장되었습니다!');
+  }
+
+  private showUnitInfoModal(unit: UnitDef): void {
+    const { width, height } = this.scale;
+
+    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setDepth(700).setInteractive();
+
+    const panelWidth = width * 0.82;
+    const panelHeight = height * 0.55;
+    const panelX = width / 2;
+    const panelY = height / 2;
+
+    const rarity = getRarity(unit.rarity);
+    const sigil = ROLE_SIGILS[unit.role];
+    const rarityColor = Phaser.Display.Color.HexStringToColor(rarity.c1).color;
+
+    const panel = this.add.graphics().setDepth(701);
+    panel.fillStyle(0x151a28, 0.98);
+    panel.fillRoundedRect(panelX - panelWidth / 2, panelY - panelHeight / 2, panelWidth, panelHeight, px(14));
+    panel.lineStyle(px(2.5), rarityColor, 1);
+    panel.strokeRoundedRect(panelX - panelWidth / 2, panelY - panelHeight / 2, panelWidth, panelHeight, px(14));
+
+    this.add
+      .text(panelX + panelWidth / 2 - px(22), panelY - panelHeight / 2 + px(20), '✕', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(18)}px`,
+        color: '#9a917d',
+      })
+      .setOrigin(0.5)
+      .setDepth(703)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.layout());
+
+    const iconSize = panelWidth * 0.26;
+    const iconY = panelY - panelHeight * 0.36;
+    const key = `unitinfo-${unit.id}-${Math.round(iconSize)}`;
+    createGemTexture(this, key, rarity, sigil, 1, Math.round(iconSize));
+    this.add.image(panelX, iconY, key).setDisplaySize(iconSize, iconSize).setDepth(702);
+
+    const category = ROLE_CATEGORIES[unit.role] ?? '';
+    const description = ROLE_DESCRIPTIONS[unit.role] ?? '';
+    const textWrapWidth = panelWidth * 0.82;
+
+    const nameText = this.add
+      .text(panelX, 0, unit.name, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(18)}px`,
+        color: '#f6e6b4',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 0);
+
+    const rarityText = this.add
+      .text(panelX, 0, rarity.label, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: rarity.c1,
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 0);
+
+    const categoryText = this.add
+      .text(panelX, 0, category, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#9fd8ff',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 0);
+
+    const descText = this.add
+      .text(panelX, 0, description, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#c9c2af',
+        align: 'center',
+        wordWrap: { width: textWrapWidth },
+      })
+      .setOrigin(0.5, 0);
+
+    const statsText = this.add
+      .text(panelX, 0, `공격 ${unit.attack}  ·  속도 ${unit.attackSpeed}  ·  사거리 ${unit.range}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#ffd98a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5, 0);
+
+    const lineGap = panelHeight * 0.03;
+    let cursorY = iconY + iconSize / 2 + panelHeight * 0.07;
+    nameText.setY(cursorY);
+    cursorY += nameText.height + lineGap;
+    rarityText.setY(cursorY);
+    cursorY += rarityText.height + lineGap;
+    categoryText.setY(cursorY);
+    cursorY += categoryText.height + lineGap;
+    descText.setY(cursorY);
+    cursorY += descText.height + lineGap * 1.5;
+    statsText.setY(cursorY);
+
+    [nameText, rarityText, categoryText, descText, statsText].forEach((t) => t.setDepth(702));
+
+    const closeBtnWidth = panelWidth * 0.5;
+    const closeBtnHeight = panelHeight * 0.11;
+    const closeBtnY = panelY + panelHeight / 2 - panelHeight * 0.1;
+
+    const closeBg = this.add.graphics().setDepth(701);
+    closeBg.fillStyle(0x1f2536, 1);
+    closeBg.fillRoundedRect(panelX - closeBtnWidth / 2, closeBtnY - closeBtnHeight / 2, closeBtnWidth, closeBtnHeight, px(10));
+    closeBg.lineStyle(px(2), 0xd4b36a, 1);
+    closeBg.strokeRoundedRect(panelX - closeBtnWidth / 2, closeBtnY - closeBtnHeight / 2, closeBtnWidth, closeBtnHeight, px(10));
+
+    this.add
+      .text(panelX, closeBtnY, '닫기', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(15)}px`,
+        color: '#ffd98a',
+        fontStyle: 'bold',
+      })
+      .setOrigin(0.5)
+      .setDepth(702);
+
+    this.add
+      .zone(panelX, closeBtnY, closeBtnWidth, closeBtnHeight)
+      .setDepth(703)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.layout());
   }
 
   private showAttendanceModal(): void {
@@ -674,6 +825,10 @@ export class DeckSelectScene extends Phaser.Scene {
           this.attendanceOpen = false;
           this.layout();
           if (result) {
+            // 받은 직후 바로 서버에 저장해둔다. 다음 접속(특히 곧바로 새로고침하거나
+            // 창을 닫는 경우) 때 주기 저장(20초 간격)이 아직 안 된 상태로 서버의
+            // "아직 안 받음" 값이 다시 덮어써서 같은 날 또 받아지는 문제를 막기 위함.
+            void flushSnapshot();
             this.showToast(`${result.day}일차: ${getBoxType(result.reward.boxId).name} ${result.reward.count}개 획득!`);
           }
         });

@@ -80,3 +80,21 @@ export async function hasSession(): Promise<boolean> {
   const { data } = await supabase.auth.getSession();
   return !!data.session;
 }
+
+// 회원 탈퇴 전, 비밀번호를 다시 입력받아 본인 확인을 한다(재로그인으로 검증).
+// 확인되면 서버 함수로 계정을 완전히 삭제한다.
+export async function deleteAccount(nickname: string, password: string): Promise<AuthResult> {
+  const email = nicknameToEmail(nickname);
+  const { error: reauthError } = await supabase.auth.signInWithPassword({ email, password });
+  if (reauthError) {
+    return { ok: false, error: '비밀번호가 올바르지 않아요' };
+  }
+
+  const { error } = await supabase.rpc('delete_own_account');
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  await supabase.auth.signOut();
+  return { ok: true };
+}

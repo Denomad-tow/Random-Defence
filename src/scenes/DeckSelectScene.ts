@@ -10,6 +10,7 @@ import { loadBoxes } from '../meta/boxes';
 import { sortByRarityThenLevel } from '../meta/unitSort';
 import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
+import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { canClaimAttendanceToday, currentAttendanceDay, claimAttendance } from '../meta/attendance';
 import { ATTENDANCE_REWARDS } from '../core/attendanceBalance';
 import { getBoxType } from '../meta/gacha';
@@ -170,6 +171,22 @@ export class DeckSelectScene extends Phaser.Scene {
       const y = navTop + row * (navSlotHeight + navRowGap);
       this.drawNavButton(x, y, navWidth, navHeight, btn.label, btn.color, btn.onClick);
     });
+
+    // 로그아웃 버튼 바로 아래에 작은 "회원 탈퇴" 링크를 둔다(자주 누를
+    // 일이 없는 위험한 동작이라 눈에 덜 띄게 처리).
+    const logoutX = navStartX + 3 * (navSlotWidth + navGap);
+    const logoutRowY = navTop + (navSlotHeight + navRowGap);
+    const deleteLinkY = logoutRowY + navHeight / 2 + height * 0.02;
+    this.add
+      .text(logoutX, deleteLinkY, '회원 탈퇴', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#7a6a6a',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.handleDeleteAccount());
 
     this.drawSlotTabs(width, height * 0.32);
 
@@ -452,6 +469,14 @@ export class DeckSelectScene extends Phaser.Scene {
       .then(() => {
         window.location.reload();
       });
+  }
+
+  private handleDeleteAccount(): void {
+    if (!this.nickname) {
+      this.showToast('잠시 후 다시 시도해주세요');
+      return;
+    }
+    showDeleteAccountOverlay(this.nickname);
   }
 
   private toggleUnit(id: string): void {

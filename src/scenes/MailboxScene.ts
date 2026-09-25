@@ -5,6 +5,7 @@ import { addBox } from '../meta/boxes';
 import { getBoxType } from '../meta/gacha';
 import { mountAdminMailOverlay } from '../core/adminMailOverlay';
 import { mountAdminResetPasswordOverlay } from '../core/adminResetPasswordOverlay';
+import { mountAdminMembersOverlay } from '../core/adminMembersOverlay';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -88,6 +89,18 @@ export class MailboxScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .setPadding(px(8), px(6), px(8), px(6))
         .on('pointerdown', () => mountAdminResetPasswordOverlay());
+
+      this.add
+        .text(px(12), height * 0.09, '회원 목록', {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(12)}px`,
+          color: '#9fd8ff',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0, 0.5)
+        .setInteractive({ useHandCursor: true })
+        .setPadding(px(8), px(6), px(8), px(6))
+        .on('pointerdown', () => mountAdminMembersOverlay());
     }
 
     if (this.loading) {

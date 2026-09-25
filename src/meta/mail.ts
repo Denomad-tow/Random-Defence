@@ -65,6 +65,23 @@ export async function findUserByNickname(nickname: string): Promise<string | nul
   }
 }
 
+export interface MemberInfo {
+  nickname: string;
+  created_at: string;
+  last_seen_at: string | null;
+}
+
+// 운영자 전용: 운영자를 뺀 모든 가입자와 마지막 접속 시각을 가져온다.
+export async function listMembers(): Promise<MemberInfo[] | null> {
+  try {
+    const { data, error } = await supabase.rpc('admin_list_members');
+    if (error || !data) return null;
+    return data as MemberInfo[];
+  } catch {
+    return null;
+  }
+}
+
 export async function adminResetPassword(nickname: string, newPassword: string): Promise<boolean> {
   try {
     const { error } = await supabase.rpc('admin_reset_password', {

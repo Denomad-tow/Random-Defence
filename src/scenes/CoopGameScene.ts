@@ -4,6 +4,7 @@ import {
   getCellPositions,
   cellIndex,
   resolveCorridorPoint,
+  toOrthogonalPath,
   FIELD_ROWS,
   type BoardLayout,
   type CellPosition,
@@ -882,7 +883,7 @@ export class CoopGameScene extends Phaser.Scene {
 
     const buttonY = Math.min(height * 0.92, fieldTop + fieldAreaHeight + boardLayout.cellSize * 1.1);
     const buttonHeight = boardLayout.cellSize * 0.9;
-    const naturalFieldBottomY = boardLayout.originY + (FIELD_ROWS - 1) * this.boardStep + boardLayout.cellSize * 0.55;
+    const naturalFieldBottomY = boardLayout.originY + (FIELD_ROWS - 1) * this.boardStep + boardLayout.cellSize / 2 + boardLayout.gap / 2;
     this.fieldBottomY = Math.min(naturalFieldBottomY, buttonY - buttonHeight / 2 - boardLayout.cellSize * 0.35);
 
     const pathPoints = this.resolveMapPathPoints(boardLayout, headerHeight);
@@ -1206,12 +1207,12 @@ export class CoopGameScene extends Phaser.Scene {
     const lastPoint = corridorPoints[corridorPoints.length - 1];
     corridorPoints[corridorPoints.length - 1] = { x: lastPoint.x, y: this.fieldBottomY };
 
-    return [topPoint, ...corridorPoints];
+    return toOrthogonalPath([topPoint, ...corridorPoints]);
   }
 
   private buildCurve(points: { x: number; y: number }[]): Phaser.Curves.Path {
     const curve = new Phaser.Curves.Path(points[0].x, points[0].y);
-    curve.splineTo(points.slice(1).map((p) => new Phaser.Math.Vector2(p.x, p.y)));
+    points.slice(1).forEach((p) => curve.lineTo(p.x, p.y));
     return curve;
   }
 

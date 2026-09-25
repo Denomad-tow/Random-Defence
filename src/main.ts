@@ -12,7 +12,8 @@ import { CoopGameScene } from './scenes/CoopGameScene';
 import { VersusGameScene } from './scenes/VersusGameScene';
 import { RankingScene } from './scenes/RankingScene';
 import { DPR } from './core/dpr';
-import { hasSession } from './meta/auth';
+import { hasSession, getCurrentNickname } from './meta/auth';
+import { connectGlobalChat } from './meta/globalChat';
 import { mountLoginOverlay } from './core/loginOverlay';
 import { pullSnapshot, startCloudSync } from './core/cloudSync';
 
@@ -56,6 +57,8 @@ function startGame(): void {
 
 async function startAfterAuth(): Promise<void> {
   await pullSnapshot();
+  const nickname = await getCurrentNickname();
+  if (nickname) connectGlobalChat(nickname);
   startGame();
   startCloudSync();
 }

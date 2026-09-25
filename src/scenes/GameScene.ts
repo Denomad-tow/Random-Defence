@@ -49,6 +49,7 @@ import {
   createGemTexture,
 } from '../core/graphics/texture';
 import { px } from '../core/dpr';
+import { mountGlobalChat } from '../core/globalChatOverlay';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
@@ -138,6 +139,9 @@ export class GameScene extends Phaser.Scene {
 
     this.layout();
     this.scale.on('resize', () => this.layout());
+
+    const globalChat = mountGlobalChat();
+    this.events.once('shutdown', () => globalChat.destroy());
 
     void getCurrentNickname().then((nick) => {
       this.currentNickname = nick ?? '';

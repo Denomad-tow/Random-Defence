@@ -144,7 +144,7 @@ function injectStyle(): void {
 }
 
 export interface ChatHandle {
-  addMessage(nickname: string, message: string, isMine: boolean): void;
+  addMessage(nickname: string, message: string, isMine: boolean, silent?: boolean): void;
   destroy(): void;
 }
 
@@ -226,7 +226,7 @@ export function mountChatOverlay(onSend: (message: string) => void): ChatHandle 
   });
 
   return {
-    addMessage(nickname, message, isMine) {
+    addMessage(nickname, message, isMine, silent = false) {
       if (!hasMessages) {
         hasMessages = true;
         emptyHint.remove();
@@ -244,7 +244,7 @@ export function mountChatOverlay(onSend: (message: string) => void): ChatHandle 
       list.appendChild(row);
       list.scrollTop = list.scrollHeight;
 
-      if (!open && !isMine) {
+      if (!open && !isMine && !silent) {
         unread += 1;
         badge.textContent = String(unread);
         badge.style.display = 'flex';

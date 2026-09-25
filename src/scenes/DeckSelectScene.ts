@@ -13,6 +13,7 @@ import { flushSnapshot } from '../core/cloudSync';
 import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { showBugReportOverlay } from '../core/bugReportOverlay';
 import { showChangePasswordOverlay } from '../core/changePasswordOverlay';
+import { mountGlobalChat } from '../core/globalChatOverlay';
 import { canClaimAttendanceToday, currentAttendanceDay, claimAttendance } from '../meta/attendance';
 import { ATTENDANCE_REWARDS } from '../core/attendanceBalance';
 import { getBoxType } from '../meta/gacha';
@@ -37,6 +38,7 @@ export class DeckSelectScene extends Phaser.Scene {
   private nickname = '';
   private nicknameText?: Phaser.GameObjects.Text;
   private attendanceOpen = false;
+  private globalChat?: { destroy: () => void };
   private lastTapId: string | null = null;
   private lastTapTime = 0;
 
@@ -63,6 +65,13 @@ export class DeckSelectScene extends Phaser.Scene {
     }
 
     this.selected = new Set(validSaved.slice(0, DECK_SIZE));
+
+    this.globalChat = mountGlobalChat();
+    this.events.once('shutdown', () => {
+      this.globalChat?.destroy();
+      this.globalChat = undefined;
+    });
+
     this.layout();
     this.scale.on('resize', () => {
       this.layout();

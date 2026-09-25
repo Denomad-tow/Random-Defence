@@ -1,4 +1,5 @@
-import { listMembers } from '../meta/mail';
+import { listMembers, type MemberInfo } from '../meta/mail';
+import { subscribeOnline } from '../meta/globalChat';
 import { injectStyle } from './adminMailOverlay';
 
 const STYLE_ID = 'rd-members-style';
@@ -107,8 +108,15 @@ export function mountAdminMembersOverlay(): void {
   buttons.appendChild(closeButton);
   card.appendChild(buttons);
 
-  void listMembers().then((members) => {
+  let members: MemberInfo[] | null | undefined;
+  let online = new Set<string>();
+
+  // 접속 중인 사람은 맨 위로 올리고 초록 점 + "접속 중"으로 표시한다. 접속 중
+  // 목록은 실시간으로 바뀌므로, 창이 열려 있는 동안 계속 다시 그린다.
+  function render(): void {
     list.innerHTML = '';
+
+    if (members === undefined) return;
 
     if (members === null) {
       summary.textContent = '';
@@ -119,7 +127,8 @@ export function mountAdminMembersOverlay(): void {
       return;
     }
 
-    summary.textContent = `운영자를 뺀 가입자 ${members.length}명 · 최근 접속 순`;
+    const onlineCount = members.filter((m) => online.has(m.nickname)).length;
+    summary.textContent = `운영자를 뺀 가입자 ${members.length}명 · 지금 접속 중 ${onlineCount}명`;
 
     if (members.length === 0) {
       const empty = document.createElement('div');
@@ -129,25 +138,40 @@ export function mountAdminMembersOverlay(): void {
       return;
     }
 
-    members.forEach((member) => {
+    const sorted = [...members].sort((a, b) => Number(online.has(b.nickname)) - Number(online.has(a.nickname)));
+
+    sorted.forEach((member) => {
+      const isOnline = online.has(member.nickname);
       const row = document.createElement('div');
       row.className = 'rd-members-row';
 
       const name = document.createElement('span');
       name.className = 'rd-members-name';
-      name.textContent = member.nickname;
+      name.textContent = `${isOnline ? '🟢 ' : ''}${member.nickname}`;
       row.appendChild(name);
 
       const time = document.createElement('span');
       const lastSeen = member.last_seen_at ?? member.created_at;
-      const isOld = !lastSeen || Date.now() - new Date(lastSeen).getTime() > WEEK_MS;
+      const isOld = !isOnline && (!lastSeen || Date.now() - new Date(lastSeen).getTime() > WEEK_MS);
       time.className = isOld ? 'rd-members-time old' : 'rd-members-time';
-      time.textContent = formatTime(member.last_seen_at);
+      time.textContent = isOnline ? '접속 중' : formatTime(member.last_seen_at);
       row.appendChild(time);
 
       list.appendChild(row);
     });
+  }
+
+  const unsubscribeOnline = subscribeOnline((nicknames) => {
+    online = new Set(nicknames);
+    render();
   });
+
+  void listMembers().then((result) => {
+    members = result;
+    render();
+  });
+
+  closeButton.addEventListener('click', unsubscribeOnline);
 
   document.body.appendChild(overlay);
 }

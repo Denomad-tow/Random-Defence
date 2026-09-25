@@ -51,9 +51,12 @@ import {
   setGameSpeedHandler,
   broadcastGameSpeed,
   getLatestMembers,
+  setChatHandler,
+  broadcastChat,
   type PartyMember,
   type MonsterSyncPayload,
 } from '../meta/party';
+import { mountChatOverlay, type ChatHandle } from '../core/chatOverlay';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -129,6 +132,7 @@ export class CoopGameScene extends Phaser.Scene {
   private gameSpeed = 1;
   private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text }>();
   private speedText?: Phaser.GameObjects.Text;
+  private chat?: ChatHandle;
 
   constructor() {
     super('coop-game');
@@ -165,6 +169,15 @@ export class CoopGameScene extends Phaser.Scene {
 
     void getCurrentNickname().then((nick) => {
       this.nickname = nick ?? '';
+    });
+
+    this.chat = mountChatOverlay((message) => {
+      const nickname = this.nickname || '나';
+      broadcastChat({ nickname, message });
+      this.chat?.addMessage(nickname, message, true);
+    });
+    setChatHandler((payload) => {
+      this.chat?.addMessage(payload.nickname, payload.message, payload.nickname === this.nickname);
     });
 
     if (this.isHost) {
@@ -253,6 +266,7 @@ export class CoopGameScene extends Phaser.Scene {
     this.spawnTimer?.remove();
     this.syncTimer?.remove();
     this.hostMissingTimer?.remove();
+    this.chat?.destroy();
     leaveRoom();
   }
 

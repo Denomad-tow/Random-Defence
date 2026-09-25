@@ -50,12 +50,15 @@ import {
   setVersusEliminatedHandler,
   broadcastVersusWin,
   setVersusWinHandler,
+  setChatHandler,
+  broadcastChat,
   type PartyMember,
   type PartyMode,
   type VersusStatusPayload,
   type VersusEliminatedPayload,
   type VersusWinPayload,
 } from '../meta/party';
+import { mountChatOverlay, type ChatHandle } from '../core/chatOverlay';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -117,6 +120,7 @@ export class VersusGameScene extends Phaser.Scene {
   private placedUnits = new Map<number, PlacedUnit>();
   private deckUnitIds: string[] = [];
   private nickname = '';
+  private chat?: ChatHandle;
 
   private members: PartyMember[] = [];
   private opponents = new Map<string, OpponentStatus>();
@@ -173,6 +177,15 @@ export class VersusGameScene extends Phaser.Scene {
       this.nickname = nick ?? '';
     });
 
+    this.chat = mountChatOverlay((message) => {
+      const nickname = this.nickname || '나';
+      broadcastChat({ nickname, message });
+      this.chat?.addMessage(nickname, message, true);
+    });
+    setChatHandler((payload) => {
+      this.chat?.addMessage(payload.nickname, payload.message, payload.nickname === this.nickname);
+    });
+
     this.currentMap = pickRandomMapPreset();
     this.layout();
     this.boardReady = true;
@@ -221,6 +234,7 @@ export class VersusGameScene extends Phaser.Scene {
     if (!this.isEliminated && !this.isMatchOver) {
       this.eliminateSelf();
     }
+    this.chat?.destroy();
     leaveRoom();
   }
 

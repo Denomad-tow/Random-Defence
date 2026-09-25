@@ -79,6 +79,11 @@ export interface VersusWinPayload {
   nickname: string;
 }
 
+export interface ChatPayload {
+  nickname: string;
+  message: string;
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 헷갈리는 0/O, 1/I 제외
 const CODE_LENGTH = 5;
 
@@ -99,6 +104,7 @@ let versusStatusHandler: (payload: VersusStatusPayload) => void = () => {};
 let versusGiftHandler: (payload: VersusGiftPayload) => void = () => {};
 let versusEliminatedHandler: (payload: VersusEliminatedPayload) => void = () => {};
 let versusWinHandler: (payload: VersusWinPayload) => void = () => {};
+let chatHandler: (payload: ChatPayload) => void = () => {};
 
 function randomCode(): string {
   let code = '';
@@ -139,6 +145,7 @@ function connect(
   versusGiftHandler = () => {};
   versusEliminatedHandler = () => {};
   versusWinHandler = () => {};
+  chatHandler = () => {};
   // roomFullHandler는 leaveRoom()에서 지우지 않는다 — 정원 초과로 스스로 나갈 때
   // leaveRoom()을 호출한 "다음"에 이 핸들러를 불러야 하기 때문.
 
@@ -207,6 +214,10 @@ function connect(
     versusWinHandler(msg.payload as VersusWinPayload);
   });
 
+  channel.on('broadcast', { event: 'chat' }, (msg) => {
+    chatHandler(msg.payload as ChatPayload);
+  });
+
   return new Promise((resolve, reject) => {
     channel!.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
@@ -262,6 +273,7 @@ export function leaveRoom(): void {
   versusGiftHandler = () => {};
   versusEliminatedHandler = () => {};
   versusWinHandler = () => {};
+  chatHandler = () => {};
   // roomFullHandler는 여기서 지우지 않는다 — 정원 초과로 나갈 때는 leaveRoom() 안에서
   // 호출한 뒤 곧바로 이 핸들러로 알려줘야 하기 때문에, 연결 하나에 묶이지 않는다.
 }
@@ -348,6 +360,14 @@ export function setVersusWinHandler(handler: (payload: VersusWinPayload) => void
 
 export function broadcastVersusWin(payload: VersusWinPayload): void {
   channel?.send({ type: 'broadcast', event: 'versus-win', payload });
+}
+
+export function setChatHandler(handler: (payload: ChatPayload) => void): void {
+  chatHandler = handler;
+}
+
+export function broadcastChat(payload: ChatPayload): void {
+  channel?.send({ type: 'broadcast', event: 'chat', payload });
 }
 
 export function isRoomHost(): boolean {

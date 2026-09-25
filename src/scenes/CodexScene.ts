@@ -135,7 +135,7 @@ export class CodexScene extends Phaser.Scene {
 
     // 중앙 이름·분류·특성 글씨 크기는 컬렉션 화면의 특성 설명 글씨 크기와 동일하게 맞춘다.
     const collectionButtonWidth = cardW * 0.34 * 0.88;
-    const centerFontSize = Math.max(8, Math.round(collectionButtonWidth * 0.1));
+    const centerFontSize = Math.max(8, Math.round(collectionButtonWidth * 0.1)) * 2;
     const textCx = cardX + iconAreaWidth + textAreaWidth / 2;
     const textWrapWidth = textAreaWidth - cardW * 0.03;
     const centerLineGap = cardH * 0.015;
@@ -190,7 +190,7 @@ export class CodexScene extends Phaser.Scene {
       { label: '속도', value: `${unit.attackSpeed}` },
       { label: '사거리', value: `${unit.range}` },
     ];
-    const statFontSize = Math.max(7, Math.round(cardW * 0.035));
+    const statFontSize = Math.max(7, Math.round(cardW * 0.035)) * 2;
     const statGap = cardH * 0.03;
 
     const probe = this.add.text(0, 0, '측정용', {

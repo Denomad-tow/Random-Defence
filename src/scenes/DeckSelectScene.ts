@@ -420,11 +420,10 @@ export class DeckSelectScene extends Phaser.Scene {
     bg.lineStyle(px(1.5), Phaser.Display.Color.HexStringToColor(color).color, 0.8);
     bg.strokeRoundedRect(x - buttonWidth / 2, y - buttonHeight / 2, buttonWidth, buttonHeight, px(8));
 
-    const fontSize = Math.max(9, Math.round(buttonWidth * 0.135)) / 2;
     this.add
       .text(x, y, label, {
         fontFamily: TITLE_FONT,
-        fontSize: `${fontSize}px`,
+        fontSize: `${px(15)}px`,
         color,
         fontStyle: 'bold',
       })

@@ -73,6 +73,7 @@ import {
 } from '../core/effectsEngine';
 import { drawStatusRings } from '../core/statusRings';
 import { PlayerField } from '../core/playerField';
+import { playSfx } from '../core/sfx';
 import { playProjectile, spawnDeathBurst } from '../core/combatVfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -315,6 +316,7 @@ export class VersusGameScene extends Phaser.Scene {
         placed.cooldown = gold.interval;
         this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
         this.refreshHud();
+        playSfx('mana');
         this.spawnFloatingText(cell.x, cell.y, `+${gold.value}마나`, '#9adfa0');
         return;
       }
@@ -336,6 +338,7 @@ export class VersusGameScene extends Phaser.Scene {
 
   // 발사체가 날아가 도착했을 때(그 사이 몬스터가 죽었으면 취소) 효과를 적용한다.
   private performAttack(cell: CellPosition, unit: UnitDef, target: MyMonster): void {
+    playSfx('attack', { role: unit.role });
     playProjectile(
       this,
       cell,
@@ -348,6 +351,7 @@ export class VersusGameScene extends Phaser.Scene {
         if (mana > 0) {
           this.economy = { ...this.economy, mana: this.economy.mana + mana };
           this.refreshHud();
+          playSfx('mana');
         }
 
         this.applyHitResult(
@@ -365,6 +369,7 @@ export class VersusGameScene extends Phaser.Scene {
   }
 
   private applyHitResult(result: HitResult): void {
+    if (result.damages.length > 0) playSfx('hit');
     result.damages.forEach((damage) => {
       const monster = this.myMonsters.find((m) => m.id === damage.monsterId);
       if (!monster) return;
@@ -403,6 +408,7 @@ export class VersusGameScene extends Phaser.Scene {
     monster.hp = Math.max(0, monster.hp - amount);
     if (monster.hp <= 0) {
       spawnDeathBurst(this, monster.x, monster.y, this.cellSize);
+      playSfx(monster.kind === 'boss' ? 'bossDefeat' : 'kill');
       monster.sprite.destroy();
       this.myMonsters = this.myMonsters.filter((m) => m.id !== monsterId);
       this.grantMana(monster.kind);
@@ -607,6 +613,7 @@ export class VersusGameScene extends Phaser.Scene {
     this.statusTimer?.remove();
 
     const stage = this.waveState.stage;
+    playSfx(won ? 'newRecord' : 'defeat');
     const reward = computeRunReward(stage);
     addGold(reward.gold);
     addBox(reward.boxId);
@@ -715,6 +722,7 @@ export class VersusGameScene extends Phaser.Scene {
   }
 
   private announceBoss(): void {
+    playSfx('bossWarning');
     const { width, height } = this.scale;
 
     this.cameras.main.shake(400, 0.006);

@@ -45,6 +45,7 @@ import {
 } from '../core/graphics/texture';
 import { px } from '../core/dpr';
 import { PlayerField, type PlacedUnitState } from '../core/playerField';
+import { playSfx } from '../core/sfx';
 import { mountGlobalChat } from '../core/globalChatOverlay';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -71,6 +72,7 @@ export class GameScene extends Phaser.Scene {
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
   private gameOver = false;
   private bestStage = 0;
+  private lastAnnouncedStage = 0;
   private lastReward?: RunReward;
   private deckUnitIds: string[] = NORMAL_UNITS.map((u) => u.id);
   private statusGraphics?: Phaser.GameObjects.Graphics;
@@ -116,6 +118,7 @@ export class GameScene extends Phaser.Scene {
     this.gameOver = false;
     this.lastReward = undefined;
     this.bestStage = loadBestStage();
+    this.lastAnnouncedStage = 0;
     this.currentMap = pickRandomMapPreset();
     this.gameSpeed = 1;
     this.time.timeScale = 1;
@@ -164,7 +167,9 @@ export class GameScene extends Phaser.Scene {
     this.gameOver = true;
     this.firstSpawnTimer?.remove();
     if (this.spawnTimer) this.spawnTimer.paused = true;
+    const previousBest = this.bestStage;
     this.bestStage = saveBestStage(this.waveState.stage);
+    playSfx(this.waveState.stage > previousBest ? 'newRecord' : 'defeat');
 
     const reward = computeRunReward(this.waveState.stage);
     addGold(reward.gold);
@@ -407,6 +412,7 @@ export class GameScene extends Phaser.Scene {
     placed.cooldown = interval;
     this.economy = { ...this.economy, mana: this.economy.mana + value };
     this.refreshMana();
+    playSfx('mana');
     this.spawnFloatingText(cell.x, cell.y, `+${value}마나`, '#9adfa0');
   }
 
@@ -442,6 +448,7 @@ export class GameScene extends Phaser.Scene {
     unitDef: UnitDef,
     attack: number,
   ): void {
+    playSfx('attack', { role: unitDef.role });
     const color = ROLE_ATTACK_COLORS[unitDef.role] ?? 0xffffff;
     const rarity = getRarity(unitDef.rarity);
     const vfxScale = 1 + rarity.glow;
@@ -549,6 +556,7 @@ export class GameScene extends Phaser.Scene {
     if (Math.random() < chance) {
       this.economy = { ...this.economy, mana: this.economy.mana + value };
       this.refreshMana();
+      playSfx('mana');
     }
   }
 
@@ -646,6 +654,7 @@ export class GameScene extends Phaser.Scene {
     const hp = (target.getData('hp') as number) - damage;
     target.setData('hp', hp);
 
+    playSfx('hit');
     target.setTintFill(0xffffff);
     this.time.delayedCall(80, () => {
       if (target.active) target.clearTint();
@@ -664,6 +673,7 @@ export class GameScene extends Phaser.Scene {
 
     this.economy = { ...this.economy, mana: this.economy.mana + reward };
     this.spawnDeathBurst(target.x, target.y);
+    playSfx(kindId === 'boss' ? 'bossDefeat' : 'kill');
 
     this.monsters = this.monsters.filter((m) => m !== target);
     target.destroy();
@@ -1206,6 +1216,11 @@ export class GameScene extends Phaser.Scene {
     this.waveState = result.nextState;
     this.refreshHud();
 
+    if (result.stage !== this.lastAnnouncedStage) {
+      this.lastAnnouncedStage = result.stage;
+      if (result.kind !== 'boss') playSfx('waveStart');
+    }
+
     const kind = MONSTER_KINDS[result.kind];
     const species = pickRandomSpecies();
     const hp = Math.round(kind.baseHp * stageHpMultiplier(result.stage));
@@ -1231,6 +1246,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private announceBoss(): void {
+    playSfx('bossWarning');
     const { width, height } = this.scale;
 
     this.cameras.main.shake(400, 0.006);

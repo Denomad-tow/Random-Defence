@@ -77,6 +77,7 @@ import {
 } from '../core/effectsEngine';
 import { drawStatusRings } from '../core/statusRings';
 import { PlayerField } from '../core/playerField';
+import { playSfx } from '../core/sfx';
 import { playProjectile, spawnDeathBurst } from '../core/combatVfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -372,6 +373,7 @@ export class CoopGameScene extends Phaser.Scene {
     void flushSnapshot();
     // 협동전 순위: 참가자 각자가 자기 기록(도달 스테이지)을 남긴다.
     void recordCoopResult(this.members.length, stage, this.nickname);
+    playSfx('defeat');
 
     this.showGameOverOverlay(stage, reward, title);
   }
@@ -453,6 +455,7 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private announceBoss(): void {
+    playSfx('bossWarning');
     const { width, height } = this.scale;
 
     this.cameras.main.shake(400, 0.006);
@@ -533,6 +536,7 @@ export class CoopGameScene extends Phaser.Scene {
         placed.cooldown = gold.interval;
         this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
         this.refreshHud();
+        playSfx('mana');
         this.spawnFloatingText(cell.x, cell.y, `+${gold.value}마나`, '#9adfa0');
         return;
       }
@@ -562,6 +566,7 @@ export class CoopGameScene extends Phaser.Scene {
     const attack = this.field.attackOf(unit);
     const magnitude = this.field.statusMagnitude(unit);
     const guestEntry = isHost ? undefined : this.guestMonsters.get(target.id);
+    playSfx('attack', { role: unit.role });
 
     playProjectile(
       this,
@@ -578,6 +583,7 @@ export class CoopGameScene extends Phaser.Scene {
         if (mana > 0) {
           this.economy = { ...this.economy, mana: this.economy.mana + mana };
           this.refreshHud();
+          playSfx('mana');
         }
 
         if (isHost) {
@@ -593,6 +599,7 @@ export class CoopGameScene extends Phaser.Scene {
             magnitude,
           });
           this.spawnFloatingText(target.x, target.y, `-${attack}`, '#fff5d6');
+          playSfx('hit');
         }
       },
     );
@@ -652,6 +659,7 @@ export class CoopGameScene extends Phaser.Scene {
 
   // 방장 전용: 엔진이 계산한 피해를 실제 체력에 반영한다.
   private applyHitResult(result: HitResult): void {
+    if (result.damages.length > 0) playSfx('hit');
     result.damages.forEach((damage) => {
       const monster = this.hostMonsters.find((m) => m.id === damage.monsterId);
       if (!monster) return;
@@ -692,6 +700,7 @@ export class CoopGameScene extends Phaser.Scene {
     monster.hp = Math.max(0, monster.hp - amount);
     if (monster.hp <= 0) {
       spawnDeathBurst(this, monster.x, monster.y, this.cellSize);
+      playSfx(monster.kind === 'boss' ? 'bossDefeat' : 'kill');
       monster.sprite.destroy();
       this.hostMonsters = this.hostMonsters.filter((m) => m.id !== monsterId);
       this.grantMana(monster.kind);
@@ -840,6 +849,7 @@ export class CoopGameScene extends Phaser.Scene {
     for (const [id, entry] of this.guestMonsters) {
       if (!seen.has(id)) {
         spawnDeathBurst(this, entry.sprite.x, entry.sprite.y, this.cellSize);
+        playSfx('kill');
         entry.sprite.destroy();
         this.guestMonsters.delete(id);
       }

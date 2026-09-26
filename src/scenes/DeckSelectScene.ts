@@ -10,6 +10,8 @@ import { loadBoxes } from '../meta/boxes';
 import { sortByRarityThenLevel } from '../meta/unitSort';
 import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
+import { showInfoModal } from '../core/infoModal';
+import { hasUnseenPatch, latestPatch, markPatchSeen, patchToModal } from '../meta/patchNotes';
 import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { showBugReportOverlay } from '../core/bugReportOverlay';
 import { showChangePasswordOverlay } from '../core/changePasswordOverlay';
@@ -76,6 +78,8 @@ export class DeckSelectScene extends Phaser.Scene {
 
     if (canClaimAttendanceToday()) {
       this.showAttendanceModal();
+    } else {
+      this.maybeShowPatchPopup();
     }
   }
 
@@ -115,6 +119,20 @@ export class DeckSelectScene extends Phaser.Scene {
         color: '#9fd8ff',
       })
       .setOrigin(0, 0);
+
+    const latestNote = latestPatch();
+    const unseenPatch = hasUnseenPatch();
+    this.add
+      .text(width - px(12), px(12), `공지 v${latestNote?.version ?? ''}${unseenPatch ? ' ●' : ''}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(14)}px`,
+        color: unseenPatch ? '#ff9a6a' : '#9a917d',
+        fontStyle: unseenPatch ? 'bold' : 'normal',
+      })
+      .setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.scene.start('patch-notes'));
 
     this.add
       .text(width / 2, height * 0.05, '덱을 선택하세요', {
@@ -192,6 +210,18 @@ export class DeckSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setPadding(px(6), px(6), px(6), px(6))
       .on('pointerdown', () => this.handleDeleteAccount());
+
+    // 연구 버튼 아래에는 "사운드"(소리 설정과 효과음 테스트) 링크를 둔다.
+    this.add
+      .text(navStartX, deleteLinkY, '사운드', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11)}px`,
+        color: '#7a7a6a',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.scene.start('sound-test'));
 
     // 파티 버튼 아래에는 "비밀번호 변경" 링크를 둔다.
     const partyX = navStartX + 1 * (navSlotWidth + navGap);
@@ -724,6 +754,7 @@ export class DeckSelectScene extends Phaser.Scene {
           const result = claimAttendance();
           this.attendanceOpen = false;
           this.layout();
+          this.maybeShowPatchPopup();
           if (result) {
             // 받은 직후 바로 서버에 저장해둔다. 다음 접속(특히 곧바로 새로고침하거나
             // 창을 닫는 경우) 때 주기 저장(20초 간격)이 아직 안 된 상태로 서버의
@@ -748,7 +779,17 @@ export class DeckSelectScene extends Phaser.Scene {
       .on('pointerdown', () => {
         this.attendanceOpen = false;
         this.layout();
+        this.maybeShowPatchPopup();
       });
+  }
+
+  // 아직 보지 않은 새 공지(패치 노트)가 있으면 팝업으로 한 번 보여준다. 출석 보상 창이 열려 있는 동안에는 미룬다.
+  private maybeShowPatchPopup(): void {
+    if (this.attendanceOpen || !hasUnseenPatch()) return;
+    const latest = latestPatch();
+    if (!latest) return;
+    markPatchSeen();
+    showInfoModal(this, patchToModal(latest));
   }
 
   private showToast(message: string): void {

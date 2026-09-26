@@ -9,6 +9,7 @@ import { createGemTexture } from './graphics/texture';
 import { generalAttackMultiplier, generalAttackSpeedBonus, roleMultiplier } from '../meta/research';
 import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { px } from './dpr';
+import { playSfx, rarityIndex } from './sfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const DOUBLE_TAP_WINDOW_MS = 320;
@@ -243,6 +244,7 @@ export class PlayerField {
     const placed: PlacedUnitState = { unit: pickRandomUnit(this.host.deckPool()), star: 1, cooldown: Math.random() * 0.3 };
     this.placedUnits.set(cellIndex(cell.row, cell.col), placed);
     this.drawUnit(cell, placed, true);
+    playSfx('summon', { rarity: rarityIndex(placed.unit.rarity) });
     this.notifyChange();
   }
 
@@ -271,6 +273,7 @@ export class PlayerField {
 
     this.placedUnits.set(index, this.pendingSummon);
     this.drawUnit(cell, this.pendingSummon, true);
+    playSfx('summon', { rarity: rarityIndex(this.pendingSummon.unit.rarity) });
 
     this.pendingSummon = undefined;
     this.pendingPreEconomy = undefined;
@@ -378,6 +381,7 @@ export class PlayerField {
     this.placedUnits.set(targetIndex, result);
     if (this.selected === sourcePlaced || this.selected === targetPlaced) this.selected = result;
 
+    playSfx('merge', { star: result.star });
     this.playMergeEffect(sourceCell, targetCell, () => {
       this.drawUnit(targetCell, result, true);
       this.refreshActionBar();
@@ -422,6 +426,7 @@ export class PlayerField {
     const { cells, cellSize } = this.host.geometry();
     const changed = new Set<number>();
     let merges = 0;
+    let highestStar = 2;
 
     for (let guard = 0; guard < 200; guard += 1) {
       const entries = Array.from(this.placedUnits.entries());
@@ -451,7 +456,9 @@ export class PlayerField {
       changed.delete(sourceIndex);
       changed.add(targetIndex);
       merges += 1;
+      highestStar = Math.max(highestStar, result.star);
     }
+    if (merges > 0) playSfx('merge', { star: highestStar });
 
     changed.forEach((index) => {
       const placed = this.placedUnits.get(index);

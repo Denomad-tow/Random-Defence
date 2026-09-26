@@ -11,6 +11,10 @@ import { PartyScene } from './scenes/PartyScene';
 import { CoopGameScene } from './scenes/CoopGameScene';
 import { VersusGameScene } from './scenes/VersusGameScene';
 import { RankingScene } from './scenes/RankingScene';
+import { SoundTestScene } from './scenes/SoundTestScene';
+import { PatchNotesScene } from './scenes/PatchNotesScene';
+import { installAudioUnlock } from './core/audio';
+import { playSfx } from './core/sfx';
 import { DPR } from './core/dpr';
 import { hasSession, getCurrentNickname } from './meta/auth';
 import { connectGlobalChat } from './meta/globalChat';
@@ -37,6 +41,8 @@ function startGame(): void {
       CoopGameScene,
       VersusGameScene,
       RankingScene,
+      SoundTestScene,
+      PatchNotesScene,
     ],
     scale: {
       mode: Phaser.Scale.NONE,
@@ -44,6 +50,17 @@ function startGame(): void {
       width: cssWidth * DPR,
       height: cssHeight * DPR,
     },
+  });
+
+  // 첫 터치 때 소리를 켜고, 모든 화면에 공통 소리(버튼 누르기·화면 전환)를 붙인다.
+  installAudioUnlock();
+  game.events.once(Phaser.Core.Events.READY, () => {
+    game.scene.getScenes(false).forEach((scene) => {
+      scene.events.on(Phaser.Scenes.Events.CREATE, () => {
+        playSfx('screen');
+        scene.input.on('gameobjectdown', () => playSfx('click'));
+      });
+    });
   });
 
   window.addEventListener('resize', () => {

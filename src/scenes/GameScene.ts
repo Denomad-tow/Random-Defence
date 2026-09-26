@@ -46,6 +46,7 @@ import {
 import { px } from '../core/dpr';
 import { PlayerField, type PlacedUnitState } from '../core/playerField';
 import { playSfx } from '../core/sfx';
+import { starSpeedMultiplier } from '../core/starBalance';
 import { mountGlobalChat } from '../core/globalChatOverlay';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -343,7 +344,7 @@ export class GameScene extends Phaser.Scene {
         const shotCount = (effect?.count as number) ?? 2;
         const targets = this.findNearestMonsters(cell.x, cell.y, rangePx, shotCount);
         if (targets.length === 0) return;
-        placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
+        placed.cooldown = 1 / (placed.unit.attackSpeed * starSpeedMultiplier(placed.star) * (1 + bonus));
         targets.forEach((target) => this.performAttack(cell, target, placed.unit, attack, placed.star));
         return;
       }
@@ -351,7 +352,7 @@ export class GameScene extends Phaser.Scene {
       const target = this.findNearestMonster(cell.x, cell.y, rangePx);
       if (!target) return;
 
-      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
+      placed.cooldown = 1 / (placed.unit.attackSpeed * starSpeedMultiplier(placed.star) * (1 + bonus));
       this.performAttack(cell, target, placed.unit, attack, placed.star);
     });
   }

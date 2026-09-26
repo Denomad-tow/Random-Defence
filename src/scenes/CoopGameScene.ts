@@ -78,6 +78,7 @@ import {
 import { drawStatusRings } from '../core/statusRings';
 import { PlayerField } from '../core/playerField';
 import { playSfx } from '../core/sfx';
+import { starSpeedMultiplier } from '../core/starBalance';
 import { playProjectile, spawnDeathBurst } from '../core/combatVfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -554,7 +555,7 @@ export class CoopGameScene extends Phaser.Scene {
       if (targets.length === 0) return;
 
       const bonus = (buffBonuses.get(index) ?? 0) + this.field.attackSpeedBonus();
-      placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
+      placed.cooldown = 1 / (placed.unit.attackSpeed * starSpeedMultiplier(placed.star) * (1 + bonus));
 
       targets.forEach((target) => this.performAttack(cell, placed.unit, target, isHost, placed.star));
     });

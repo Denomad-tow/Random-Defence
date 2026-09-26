@@ -79,12 +79,13 @@ import { drawStatusRings } from '../core/statusRings';
 import { PlayerField } from '../core/playerField';
 import { playSfx } from '../core/sfx';
 import { starSpeedMultiplier } from '../core/starBalance';
-import { playProjectile, spawnDeathBurst } from '../core/combatVfx';
+import { playBolt, playProjectile, spawnDeathBurst } from '../core/combatVfx';
+import { bakePathImage, fxText, speedButtonTexture } from '../core/fx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
 const FIRST_SPAWN_DELAY_MS = 2000;
-const SYNC_INTERVAL_MS = 150;
+const SYNC_INTERVAL_MS = 180;
 const MAX_MONSTERS_ON_FIELD = 100;
 
 interface HostMonster {
@@ -129,7 +130,6 @@ export class CoopGameScene extends Phaser.Scene {
   private waveState: WaveState = createInitialWaveState();
 
   private hostMonsters: HostMonster[] = [];
-  private statusGraphics?: Phaser.GameObjects.Graphics;
   private auraSendClock = 0;
   private nextMonsterId = 1;
   private spawnTimer?: Phaser.Time.TimerEvent;
@@ -149,7 +149,7 @@ export class CoopGameScene extends Phaser.Scene {
   private membersText?: Phaser.GameObjects.Text;
   private confirmModalContainer?: Phaser.GameObjects.Container;
   private gameSpeed = 1;
-  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text }>();
+  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Image; text: Phaser.GameObjects.Text }>();
   private speedText?: Phaser.GameObjects.Text;
   private chat?: ChatHandle;
 
@@ -670,27 +670,13 @@ export class CoopGameScene extends Phaser.Scene {
     });
 
     result.bolts.forEach((bolt) => {
-      const spark = this.add.circle(bolt.fromX, bolt.fromY, px(3), 0x9fd8ff, 1);
-      this.tweens.add({
-        targets: spark,
-        x: bolt.toX,
-        y: bolt.toY,
-        duration: 120,
-        onComplete: () => spark.destroy(),
-      });
+      playBolt(this, bolt.fromX, bolt.fromY, bolt.toX, bolt.toY, 0x9fd8ff, 120);
     });
   }
 
   // 감속(파랑)·기절(노랑)·독(초록)·방어 감소(빨강) 링.
   private drawRings(targets: Array<{ x: number; y: number; flags: number }>): void {
-    if (!this.statusGraphics || !this.statusGraphics.active) {
-      this.statusGraphics = this.add.graphics().setDepth(2);
-    }
-    drawStatusRings(
-      this.statusGraphics,
-      targets.filter((t) => t.flags !== 0),
-      this.cellSize * 0.32,
-    );
+    drawStatusRings(this, targets, this.cellSize * 0.32);
   }
 
   // 호스트만 호출: 자기 자신의 공격이든, 파티원에게서 전달받은 피해 이벤트든
@@ -711,21 +697,7 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private spawnFloatingText(x: number, y: number, message: string, color: string): void {
-    const text = this.add
-      .text(x, y - px(10), message, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color,
-      })
-      .setOrigin(0.5);
-
-    this.tweens.add({
-      targets: text,
-      y: y - px(40),
-      alpha: 0,
-      duration: 550,
-      onComplete: () => text.destroy(),
-    });
+    fxText(this, x, y, message, color);
   }
 
   // ----- 호스트: 몬스터 시뮬레이션 -----
@@ -873,6 +845,22 @@ export class CoopGameScene extends Phaser.Scene {
         color: '#9a917d',
       })
       .setOrigin(0.5);
+
+    // 10초가 지나도 방장의 화면 정보가 오지 않으면(연결이 불안정한 경우) 안내 문구를 보여준다.
+    const hint = this.add
+      .text(width / 2, height * 0.52, '', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#ff9a6a',
+        align: 'center',
+        wordWrap: { width: width * 0.8 },
+      })
+      .setOrigin(0.5);
+    this.time.delayedCall(10000, () => {
+      if (!this.boardReady && hint.scene) {
+        hint.setText('아직 방장 화면이 도착하지 않았어요.\n계속 안 되면 "나가기"를 누르고 다시 입장해 보세요.');
+      }
+    });
 
     this.drawHeader(width, height);
   }
@@ -1141,11 +1129,7 @@ export class CoopGameScene extends Phaser.Scene {
       const btnWidth = text.width + px(16);
       text.setX(cursorX + px(8));
 
-      const bg = this.add.graphics();
-      bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
-      bg.fillRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
-      bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
-      bg.strokeRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
+      const bg = this.add.image(cursorX + btnWidth / 2, y, speedButtonTexture(this, btnWidth, active));
       this.children.moveBelow(bg, text);
 
       text.setOrigin(0.5, 0.5);
@@ -1175,23 +1159,7 @@ export class CoopGameScene extends Phaser.Scene {
 
     this.speedButtonRefs.forEach((refs, btnValue) => {
       const active = btnValue === value;
-      refs.bg.clear();
-      refs.bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
-      refs.bg.fillRoundedRect(
-        refs.text.x - refs.text.width / 2 - px(8),
-        refs.text.y - px(11),
-        refs.text.width + px(16),
-        px(22),
-        px(6),
-      );
-      refs.bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
-      refs.bg.strokeRoundedRect(
-        refs.text.x - refs.text.width / 2 - px(8),
-        refs.text.y - px(11),
-        refs.text.width + px(16),
-        px(22),
-        px(6),
-      );
+      refs.bg.setTexture(speedButtonTexture(this, refs.text.width + px(16), active));
       refs.text.setColor(active ? '#ffd98a' : '#8a8272');
     });
 
@@ -1231,25 +1199,9 @@ export class CoopGameScene extends Phaser.Scene {
     return curve;
   }
 
+  // 몬스터 길은 움직이지 않으므로 이미지 한 장으로 구워서 쓴다(도형을 매 프레임 그리면 무겁다).
   private drawPath(curve: Phaser.Curves.Path): void {
-    const samples = curve.getPoints(64);
-
-    const outer = this.add.graphics();
-    outer.lineStyle(px(9), 0x8a6a2c, 0.55);
-    this.strokeThroughPoints(outer, samples);
-
-    const inner = this.add.graphics();
-    inner.lineStyle(px(3), 0xd4b36a, 0.9);
-    this.strokeThroughPoints(inner, samples);
-  }
-
-  private strokeThroughPoints(graphics: Phaser.GameObjects.Graphics, points: Phaser.Math.Vector2[]): void {
-    graphics.beginPath();
-    graphics.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) {
-      graphics.lineTo(points[i].x, points[i].y);
-    }
-    graphics.strokePath();
+    bakePathImage(this, curve);
   }
 
   private drawFieldSlots(cells: CellPosition[], cellSize: number): void {

@@ -8,7 +8,7 @@ function injectStyle(): void {
   style.textContent = `
     .rd-chat-toggle {
       position: fixed;
-      top: 62px;
+      top: calc(62px + env(safe-area-inset-top));
       right: 12px;
       width: 38px;
       height: 38px;
@@ -45,7 +45,7 @@ function injectStyle(): void {
       position: fixed;
       left: 0;
       right: 0;
-      bottom: 0;
+      bottom: var(--rd-kb, 0px);
       height: 46%;
       background: rgba(10, 12, 20, 0.97);
       border-top: 1px solid rgba(212, 179, 106, 0.5);

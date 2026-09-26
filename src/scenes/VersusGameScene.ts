@@ -75,7 +75,8 @@ import { drawStatusRings } from '../core/statusRings';
 import { PlayerField } from '../core/playerField';
 import { playSfx } from '../core/sfx';
 import { starSpeedMultiplier } from '../core/starBalance';
-import { playProjectile, spawnDeathBurst } from '../core/combatVfx';
+import { playBolt, playProjectile, spawnDeathBurst } from '../core/combatVfx';
+import { bakePathImage, fxText, speedButtonTexture } from '../core/fx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
@@ -125,7 +126,6 @@ export class VersusGameScene extends Phaser.Scene {
   private waveState: WaveState = createInitialWaveState();
 
   private myMonsters: MyMonster[] = [];
-  private statusGraphics?: Phaser.GameObjects.Graphics;
   private nextMonsterId = 1;
   private spawnTimer?: Phaser.Time.TimerEvent;
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
@@ -144,7 +144,7 @@ export class VersusGameScene extends Phaser.Scene {
   private opponentsText?: Phaser.GameObjects.Text;
   private confirmModalContainer?: Phaser.GameObjects.Container;
   private gameSpeed = 1;
-  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text }>();
+  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Image; text: Phaser.GameObjects.Text }>();
   private resultExtraText?: Phaser.GameObjects.Text;
 
   constructor() {
@@ -380,24 +380,14 @@ export class VersusGameScene extends Phaser.Scene {
     });
 
     result.bolts.forEach((bolt) => {
-      const spark = this.add.circle(bolt.fromX, bolt.fromY, px(3), 0x9fd8ff, 1);
-      this.tweens.add({
-        targets: spark,
-        x: bolt.toX,
-        y: bolt.toY,
-        duration: 120,
-        onComplete: () => spark.destroy(),
-      });
+      playBolt(this, bolt.fromX, bolt.fromY, bolt.toX, bolt.toY, 0x9fd8ff, 120);
     });
   }
 
   // 감속(파랑)·기절(노랑)·독(초록)·방어 감소(빨강) 링.
   private drawStatusMarks(): void {
-    if (!this.statusGraphics || !this.statusGraphics.active) {
-      this.statusGraphics = this.add.graphics().setDepth(2);
-    }
     drawStatusRings(
-      this.statusGraphics,
+      this,
       this.myMonsters.map((m) => ({ x: m.x, y: m.y, flags: statusFlags(m.status) })).filter((t) => t.flags !== 0),
       this.cellSize * 0.32,
     );
@@ -466,21 +456,7 @@ export class VersusGameScene extends Phaser.Scene {
   }
 
   private spawnFloatingText(x: number, y: number, message: string, color: string): void {
-    const text = this.add
-      .text(x, y - px(10), message, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color,
-      })
-      .setOrigin(0.5);
-
-    this.tweens.add({
-      targets: text,
-      y: y - px(40),
-      alpha: 0,
-      duration: 550,
-      onComplete: () => text.destroy(),
-    });
+    fxText(this, x, y, message, color);
   }
 
   // ----- 몬스터 시뮬레이션 (각자 독립) -----
@@ -1010,11 +986,7 @@ export class VersusGameScene extends Phaser.Scene {
       const btnWidth = text.width + px(16);
       text.setX(cursorX + px(8));
 
-      const bg = this.add.graphics();
-      bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
-      bg.fillRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
-      bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
-      bg.strokeRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
+      const bg = this.add.image(cursorX + btnWidth / 2, y, speedButtonTexture(this, btnWidth, active));
       this.children.moveBelow(bg, text);
 
       text.setOrigin(0.5, 0.5);
@@ -1039,23 +1011,7 @@ export class VersusGameScene extends Phaser.Scene {
 
     this.speedButtonRefs.forEach((refs, btnValue) => {
       const active = btnValue === value;
-      refs.bg.clear();
-      refs.bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
-      refs.bg.fillRoundedRect(
-        refs.text.x - refs.text.width / 2 - px(8),
-        refs.text.y - px(11),
-        refs.text.width + px(16),
-        px(22),
-        px(6),
-      );
-      refs.bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
-      refs.bg.strokeRoundedRect(
-        refs.text.x - refs.text.width / 2 - px(8),
-        refs.text.y - px(11),
-        refs.text.width + px(16),
-        px(22),
-        px(6),
-      );
+      refs.bg.setTexture(speedButtonTexture(this, refs.text.width + px(16), active));
       refs.text.setColor(active ? '#ffd98a' : '#8a8272');
     });
   }
@@ -1089,25 +1045,9 @@ export class VersusGameScene extends Phaser.Scene {
     return curve;
   }
 
+  // 몬스터 길은 움직이지 않으므로 이미지 한 장으로 구워서 쓴다(도형을 매 프레임 그리면 무겁다).
   private drawPath(curve: Phaser.Curves.Path): void {
-    const samples = curve.getPoints(64);
-
-    const outer = this.add.graphics();
-    outer.lineStyle(px(9), 0x8a6a2c, 0.55);
-    this.strokeThroughPoints(outer, samples);
-
-    const inner = this.add.graphics();
-    inner.lineStyle(px(3), 0xd4b36a, 0.9);
-    this.strokeThroughPoints(inner, samples);
-  }
-
-  private strokeThroughPoints(graphics: Phaser.GameObjects.Graphics, points: Phaser.Math.Vector2[]): void {
-    graphics.beginPath();
-    graphics.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) {
-      graphics.lineTo(points[i].x, points[i].y);
-    }
-    graphics.strokePath();
+    bakePathImage(this, curve);
   }
 
   private drawFieldSlots(cells: CellPosition[], cellSize: number): void {

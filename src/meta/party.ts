@@ -1,4 +1,5 @@
 import { supabase } from '../core/supabaseClient';
+import { MONSTER_SPECIES } from '../core/monsters';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // "협동 파티전" 대기실 + 전투: 서버 표(table) 없이 Supabase Realtime의 프레즌스
@@ -15,6 +16,7 @@ export interface PartyMember {
   joinedAt: number;
   maxSize?: number; // 방장 항목에만 있음: 이 방이 받을 수 있는 최대 인원(2~5)
   mode?: PartyMode; // 방장 항목에만 있음: 이 방의 게임 모드
+  started?: boolean; // 방장 항목에만 있음: 게임이 시작되었는가(시작 알림 메시지를 놓친 참가자를 위한 보험)
 }
 
 export interface MonsterSnapshot {
@@ -113,6 +115,8 @@ let channel: RealtimeChannel | null = null;
 let hostFlag = false;
 let roomCode = '';
 let latestMembers: PartyMember[] = [];
+let myMember: PartyMember | null = null;
+let startFired = false; // 시작 처리를 이미 했는가(메시지와 프레즌스 두 경로로 와도 한 번만 처리)
 
 let membersHandler: (members: PartyMember[]) => void = () => {};
 let startHandler: (payload: StartPayload) => void = () => {};
@@ -149,6 +153,8 @@ function connect(
   leaveRoom();
   roomCode = code;
   hostFlag = isHost;
+  startFired = false;
+  myMember = null;
   membersHandler = onMembersChange;
   startHandler = onStart;
   monsterSyncHandler = () => {};
@@ -173,6 +179,17 @@ function connect(
     latestMembers = membersFromPresence();
     membersHandler(latestMembers);
 
+    // 시작 알림 메시지(broadcast)는 한 번 보내면 끝이라 네트워크 사정으로 놓칠 수 있다(특히 휴대폰).
+    // 방장이 프레즌스에 "시작됨"을 올려두므로, 메시지를 못 받았어도 여기서 알아채고 게임을 시작한다.
+    if (!isHost && !startFired) {
+      const startedHost = latestMembers.find((m) => m.isHost && m.started && m.mode);
+      if (startedHost && startedHost.mode) {
+        startFired = true;
+        startHandler({ mode: startedHost.mode });
+        return;
+      }
+    }
+
     // 참가자 쪽에서만 정원을 확인한다. 방장이 정해둔 정원(maxSize)보다 늦게
     // 들어온(joinedAt 기준) 사람은 스스로 방을 나간다. 서버가 없는 구조라
     // 완벽하게 막을 수는 없지만, 친구끼리 쓰는 캐주얼한 용도로는 충분하다.
@@ -191,15 +208,31 @@ function connect(
   });
 
   channel.on('broadcast', { event: 'start' }, (msg) => {
+    if (startFired) return;
+    startFired = true;
     startHandler(msg.payload as StartPayload);
   });
 
   channel.on('broadcast', { event: 'monster-sync' }, (msg) => {
-    monsterSyncHandler(msg.payload as MonsterSyncPayload);
+    monsterSyncHandler(decodeSync(msg.payload as WireSync));
   });
 
   channel.on('broadcast', { event: 'damage' }, (msg) => {
     damageHandler(msg.payload as DamageEventPayload);
+  });
+
+  // 파티원이 여러 번 때린 것을 한 메시지로 묶어 보낸 것을 풀어서, 하나씩 방장 처리 함수로 넘긴다.
+  channel.on('broadcast', { event: 'damage-batch' }, (msg) => {
+    const payload = msg.payload as WireDamageBatch;
+    payload.h.forEach((hit) => {
+      damageHandler({
+        monsterId: hit[0],
+        amount: hit[1],
+        from: payload.f,
+        unitId: hit[2] || undefined,
+        magnitude: hit[3],
+      });
+    });
   });
 
   channel.on('broadcast', { event: 'kill-reward' }, (msg) => {
@@ -244,6 +277,7 @@ function connect(
         const member: PartyMember = { nickname, isHost, joinedAt: Date.now() };
         if (isHost && maxSize) member.maxSize = maxSize;
         if (isHost && mode) member.mode = mode;
+        myMember = member;
         void channel!.track(member);
         resolve();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -274,6 +308,11 @@ export async function joinRoom(
 }
 
 export function leaveRoom(): void {
+  damageQueue = [];
+  if (damageFlushTimer !== undefined) {
+    window.clearTimeout(damageFlushTimer);
+    damageFlushTimer = undefined;
+  }
   if (channel) {
     void supabase.removeChannel(channel);
     channel = null;
@@ -299,7 +338,14 @@ export function leaveRoom(): void {
 }
 
 export function broadcastStart(payload: StartPayload): void {
+  startFired = true;
   channel?.send({ type: 'broadcast', event: 'start', payload });
+
+  // 메시지를 놓친 참가자를 위한 보험: 방장 프레즌스에 "시작됨"과 모드를 올려둔다.
+  if (hostFlag && channel && myMember) {
+    myMember = { ...myMember, started: true, mode: payload.mode };
+    void channel.track(myMember);
+  }
 }
 
 export function setMonsterSyncHandler(handler: (payload: MonsterSyncPayload) => void): void {
@@ -310,16 +356,94 @@ export function setMembersHandler(handler: (members: PartyMember[]) => void): vo
   membersHandler = handler;
 }
 
+// ----- 몬스터 위치 전달을 가볍게: 이름표 대신 숫자 배열로 압축해서 보낸다 -----
+// 후반에 몬스터가 100마리 가까이 되면 예전 방식(글자 이름표 포함)은 한 번에 9KB 가까이 돼서
+// 초당 6~7번 보내면 휴대폰 회선에 부담이 컸다. 몬스터 하나를 [번호, 종류, 모양, 위치, 체력, 최대체력, 상태]
+// 일곱 개 숫자로 줄이면 크기가 1/4 정도가 된다.
+const KIND_IDS = ['normal', 'elite', 'boss'];
+const SPECIES_IDS: string[] = MONSTER_SPECIES.map((sp) => sp.id as string);
+
+interface WireSync {
+  a: string; // 맵 이름
+  g: number; // 스테이지
+  m: number[][]; // [id, kind, species, t*10000, hp, maxHp, st]
+}
+
+function encodeSync(payload: MonsterSyncPayload): WireSync {
+  return {
+    a: payload.mapId,
+    g: payload.stage,
+    m: payload.monsters.map((m) => [
+      m.id,
+      Math.max(0, KIND_IDS.indexOf(m.kind)),
+      Math.max(0, SPECIES_IDS.indexOf(m.species)),
+      Math.round(m.t * 10000),
+      Math.ceil(m.hp),
+      Math.round(m.maxHp),
+      m.st ?? 0,
+    ]),
+  };
+}
+
+function decodeSync(wire: WireSync): MonsterSyncPayload {
+  return {
+    mapId: wire.a,
+    stage: wire.g,
+    monsters: wire.m.map((v) => ({
+      id: v[0],
+      kind: KIND_IDS[v[1]] ?? 'normal',
+      species: SPECIES_IDS[v[2]] ?? SPECIES_IDS[0],
+      t: v[3] / 10000,
+      hp: v[4],
+      maxHp: v[5],
+      st: v[6],
+    })),
+  };
+}
+
 export function broadcastMonsterSync(payload: MonsterSyncPayload): void {
-  channel?.send({ type: 'broadcast', event: 'monster-sync', payload });
+  channel?.send({ type: 'broadcast', event: 'monster-sync', payload: encodeSync(payload) });
 }
 
 export function setDamageHandler(handler: (payload: DamageEventPayload) => void): void {
   damageHandler = handler;
 }
 
+// 공격할 때마다 메시지를 하나씩 보내면 후반(유닛 많고 공격 빠름)에 초당 수백 개가 되어 실시간 서버의
+// 초당 메시지 제한에 걸려 멈추거나 끊긴다. 그래서 0.12초 동안 쌓인 공격을 한 메시지로 묶어 보낸다.
+const DAMAGE_FLUSH_MS = 120;
+const MAX_HITS_PER_MESSAGE = 80;
+const MAX_QUEUED_HITS = 240;
+
+type WireHit = [number, number, string, number]; // [몬스터 번호, 피해, 유닛 id, 효과 배율]
+interface WireDamageBatch {
+  f: string; // 보낸 사람 닉네임
+  h: WireHit[];
+}
+
+let damageQueue: DamageEventPayload[] = [];
+let damageFlushTimer: number | undefined;
+
+function flushDamage(): void {
+  damageFlushTimer = undefined;
+  const queue = damageQueue;
+  damageQueue = [];
+  if (!channel) return;
+
+  while (queue.length > 0) {
+    const chunk = queue.splice(0, MAX_HITS_PER_MESSAGE);
+    const payload: WireDamageBatch = {
+      f: chunk[0].from,
+      h: chunk.map((hit): WireHit => [hit.monsterId, hit.amount, hit.unitId ?? '', hit.magnitude ?? 1]),
+    };
+    channel.send({ type: 'broadcast', event: 'damage-batch', payload });
+  }
+}
+
 export function broadcastDamage(payload: DamageEventPayload): void {
-  channel?.send({ type: 'broadcast', event: 'damage', payload });
+  damageQueue.push(payload);
+  if (damageQueue.length > MAX_QUEUED_HITS) damageQueue.splice(0, damageQueue.length - MAX_QUEUED_HITS);
+  if (damageFlushTimer === undefined) damageFlushTimer = window.setTimeout(flushDamage, DAMAGE_FLUSH_MS);
 }
 
 export function setKillRewardHandler(handler: (payload: KillRewardPayload) => void): void {

@@ -15,12 +15,12 @@ import { hasUnseenPatch, latestPatch, markPatchSeen, patchToModal } from '../met
 import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { showBugReportOverlay } from '../core/bugReportOverlay';
 import { showChangePasswordOverlay } from '../core/changePasswordOverlay';
-import { mountGlobalChat } from '../core/globalChatOverlay';
+import { mountInlineChat, type InlineChatHandle } from '../core/inlineChat';
 import { showUnitInfoModal } from '../core/unitInfoModal';
 import { canClaimAttendanceToday, currentAttendanceDay, claimAttendance } from '../meta/attendance';
 import { ATTENDANCE_REWARDS } from '../core/attendanceBalance';
 import { getBoxType } from '../meta/gacha';
-import { px, capPx } from '../core/dpr';
+import { px, capPx, DPR } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const DOUBLE_TAP_WINDOW_MS = 320;
@@ -40,7 +40,7 @@ export class DeckSelectScene extends Phaser.Scene {
   private nickname = '';
   private nicknameText?: Phaser.GameObjects.Text;
   private attendanceOpen = false;
-  private globalChat?: { destroy: () => void };
+  private inlineChat?: InlineChatHandle;
   private lastTapId: string | null = null;
   private lastTapTime = 0;
 
@@ -59,10 +59,10 @@ export class DeckSelectScene extends Phaser.Scene {
 
     this.selected = new Set(validSaved.slice(0, DECK_SIZE));
 
-    this.globalChat = mountGlobalChat();
+    this.inlineChat = mountInlineChat();
     this.events.once('shutdown', () => {
-      this.globalChat?.destroy();
-      this.globalChat = undefined;
+      this.inlineChat?.destroy();
+      this.inlineChat = undefined;
     });
 
     this.layout();
@@ -307,6 +307,9 @@ export class DeckSelectScene extends Phaser.Scene {
     const saveX = width / 2 - totalButtonWidth / 2 + saveWidth / 2;
     const startBtnX = width / 2 + totalButtonWidth / 2 - startWidth / 2;
     const buttonY = cursorY;
+
+    // 시작 버튼 아래 남는 공간을 실시간 채팅창으로 채운다(화면 위쪽에서 canvas가 밀려 있는 만큼도 더한다).
+    this.inlineChat?.setTop(this.game.canvas.getBoundingClientRect().top + (buttonY + buttonHeight / 2 + height * 0.02) / DPR);
 
     this.countText = this.add
       .text(width / 2, countY, '', {

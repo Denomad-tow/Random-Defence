@@ -8,14 +8,42 @@ html,
 body {
   height: 100%;
   background: #07080d;
+  /* 화면이 손가락으로 밀려 올라가거나(아이폰 고무줄 스크롤) 확대되어 위쪽 버튼이 가려지는 것을 막는다 */
+  position: fixed;
+  width: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
 }
 
 #app {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  /* 아이폰 노치·홈 바 영역을 피해서 게임 화면을 그린다 */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 #app canvas {
   display: block;
+  touch-action: none;
+}
+
+/* 아이폰(사파리)은 글자 크기 16px 미만의 입력칸을 누르면 화면을 멋대로 확대해서 게임 화면이 어긋나고 멈춘 것처럼 된다.
+   모든 입력칸을 16px로 맞춰 확대를 막는다. */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* 채팅 버튼 위치: 안전 영역만큼 아래로 내린다 */
+:root {
+  --rd-safe-top: env(safe-area-inset-top);
+  --rd-kb: 0px;
 }

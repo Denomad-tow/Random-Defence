@@ -36,7 +36,6 @@ import { computeRunReward, type RunReward } from '../meta/rewards';
 import { generalAttackSpeedBonus } from '../meta/research';
 import { getCurrentNickname } from '../meta/auth';
 import { hasTutorialSeen, markTutorialSeen } from '../meta/tutorial';
-import { getRarity } from '../core/graphics/gem';
 import {
   createNightSkyGlowTexture,
   createSlotTexture,
@@ -47,7 +46,10 @@ import { px } from '../core/dpr';
 import { PlayerField, type PlacedUnitState } from '../core/playerField';
 import { playSfx } from '../core/sfx';
 import { starSpeedMultiplier } from '../core/starBalance';
-import { projectileStart } from '../core/combatVfx';
+import { playBolt, playProjectile, spawnDeathBurst } from '../core/combatVfx';
+import { bakePathImage, fxText, roundedRectTexture, speedButtonTexture } from '../core/fx';
+import { drawStatusRings } from '../core/statusRings';
+import { statusFlags } from '../core/effectsEngine';
 import { mountGlobalChat } from '../core/globalChatOverlay';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -73,17 +75,18 @@ export class GameScene extends Phaser.Scene {
   private spawnTimer?: Phaser.Time.TimerEvent;
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
   private gameOver = false;
+  private paused = false;
+  private pauseContainer?: Phaser.GameObjects.Container;
   private bestStage = 0;
   private lastAnnouncedStage = 0;
   private lastReward?: RunReward;
   private deckUnitIds: string[] = NORMAL_UNITS.map((u) => u.id);
-  private statusGraphics?: Phaser.GameObjects.Graphics;
   private confirmModalContainer?: Phaser.GameObjects.Container;
   private tutorialContainer?: Phaser.GameObjects.Container;
   private currentNickname = '';
   private nicknameText?: Phaser.GameObjects.Text;
   private gameSpeed = 1;
-  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text }>();
+  private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Image; text: Phaser.GameObjects.Text }>();
 
   constructor() {
     super('game');
@@ -118,6 +121,9 @@ export class GameScene extends Phaser.Scene {
     });
     this.field.registerDragHandlers();
     this.gameOver = false;
+    this.paused = false;
+    this.pauseContainer = undefined;
+    this.time.paused = false;
     this.lastReward = undefined;
     this.bestStage = loadBestStage();
     this.lastAnnouncedStage = 0;
@@ -153,7 +159,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.gameOver) return;
+    if (this.gameOver || this.paused) return;
 
     const dt = (delta / 1000) * this.gameSpeed;
     this.updateMonsters(dt);
@@ -162,6 +168,73 @@ export class GameScene extends Phaser.Scene {
     if (this.monsters.length >= MAX_MONSTERS_ON_FIELD) {
       this.triggerGameOver();
     }
+  }
+
+  // 일시정지: 몬스터·타이머·연출이 모두 멈춘다. "계속하기"를 누르면 이어진다.
+  private setPaused(value: boolean): void {
+    if (this.gameOver || this.paused === value) return;
+    this.paused = value;
+    this.time.paused = value;
+    if (value) {
+      this.tweens.pauseAll();
+      this.showPauseOverlay();
+    } else {
+      this.tweens.resumeAll();
+      this.pauseContainer?.destroy(true);
+      this.pauseContainer = undefined;
+    }
+  }
+
+  private showPauseOverlay(): void {
+    this.pauseContainer?.destroy(true);
+    const { width, height } = this.scale;
+    const container = this.add.container(0, 0).setDepth(1500);
+    this.pauseContainer = container;
+
+    // 화면 전체를 덮는 어두운 막: 아래 유닛·버튼이 눌리지 않게 입력도 막는다.
+    const dim = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.72).setInteractive();
+    container.add(dim);
+
+    container.add(
+      this.add
+        .text(width / 2, height * 0.36, '일시정지', {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(30)}px`,
+          color: '#ffd98a',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5),
+    );
+    container.add(
+      this.add
+        .text(width / 2, height * 0.42, '몬스터와 시간이 멈췄어요', {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(13)}px`,
+          color: '#9a917d',
+        })
+        .setOrigin(0.5),
+    );
+
+    const buttonWidth = Math.min(width * 0.6, px(260));
+    const buttonHeight = px(48);
+    const addButton = (y: number, label: string, color: string, onClick: () => void): void => {
+      container.add(
+        this.add.image(width / 2, y, roundedRectTexture(this, buttonWidth, buttonHeight, px(10), 0x151a28, 0.98, 0xd4b36a, px(2), 'pause')),
+      );
+      container.add(
+        this.add.text(width / 2, y, label, { fontFamily: TITLE_FONT, fontSize: `${px(16)}px`, color, fontStyle: 'bold' }).setOrigin(0.5),
+      );
+      container.add(this.add.zone(width / 2, y, buttonWidth, buttonHeight).setInteractive({ useHandCursor: true }).on('pointerdown', onClick));
+    };
+
+    addButton(height * 0.52, '▶ 계속하기', '#f6e6b4', () => this.setPaused(false));
+    addButton(height * 0.6, '나가기', '#ff9a9a', () => {
+      // 나가기: 멈춘 상태를 풀고 나간다(이번 판 진행 상황은 저장되지 않는다).
+      this.paused = false;
+      this.time.paused = false;
+      this.tweens.resumeAll();
+      this.scene.start('deck-select', { forceEdit: true });
+    });
   }
 
   private triggerGameOver(): void {
@@ -291,28 +364,15 @@ export class GameScene extends Phaser.Scene {
   // 감속·기절·독·방어 감소에 걸린 몬스터 주위에 색깔 링을 그려서, 효과가 실제로
   // 적용되고 있는지 눈으로 볼 수 있게 한다(파랑=감속, 노랑=기절, 초록=독, 빨강=방어 감소).
   private drawStatusMarks(): void {
-    if (!this.statusGraphics || !this.statusGraphics.active) {
-      this.statusGraphics = this.add.graphics().setDepth(2);
-    }
-    const g = this.statusGraphics;
-    g.clear();
-
+    const targets: Array<{ x: number; y: number; flags: number }> = [];
     this.monsters.forEach((monster) => {
       if (!monster.active) return;
       const status = monster.getData('status') as StatusEffects | undefined;
       if (!status) return;
-
-      let ring = 0;
-      const draw = (color: number): void => {
-        g.lineStyle(px(2.5), color, 0.95);
-        g.strokeCircle(monster.x, monster.y, this.cellSize * 0.32 + ring * px(4));
-        ring += 1;
-      };
-      if (status.stunRemaining !== undefined) draw(0xffe14d);
-      if (status.slowFactor !== undefined) draw(0x4fb4ff);
-      if (status.poisonRemaining !== undefined) draw(0x7be07b);
-      if (status.armorBreakRemaining !== undefined) draw(0xff6b6b);
+      const flags = statusFlags(status);
+      if (flags !== 0) targets.push({ x: monster.x, y: monster.y, flags });
     });
+    drawStatusRings(this, targets, this.cellSize * 0.32);
   }
 
   private updateCombat(dt: number): void {
@@ -452,39 +512,17 @@ export class GameScene extends Phaser.Scene {
     star = 1,
   ): void {
     playSfx('attack', { role: unitDef.role });
-    const color = ROLE_ATTACK_COLORS[unitDef.role] ?? 0xffffff;
-    const rarity = getRarity(unitDef.rarity);
-    const vfxScale = 1 + rarity.glow;
-    const targetX = target.x;
-    const targetY = target.y;
-
-    // 발사체가 유닛 한가운데서 나가면 유닛 모양이 가려져서, 목표 방향으로 유닛 가장자리에서 출발시킨다.
-    const start = projectileStart(cell, { x: targetX, y: targetY }, this.cellSize);
-
-    if (rarity.glow > 0.25) {
-      const glow = this.add.circle(start.x, start.y, px(9) * vfxScale, color, 0.35);
-      this.tweens.add({ targets: glow, alpha: 0, scale: 1.6, duration: 200, onComplete: () => glow.destroy() });
-    }
-
-    const projectile = this.add.circle(start.x, start.y, px(4) * vfxScale, color, 1);
-    const trailCount = Math.min(4, rarity.sparkleCount);
-
-    this.tweens.add({
-      targets: projectile,
-      x: targetX,
-      y: targetY,
-      duration: 160,
-      onUpdate: () => {
-        if (trailCount === 0 || Math.random() > 0.5) return;
-        const spark = this.add.circle(projectile.x, projectile.y, px(2), color, 0.7);
-        this.tweens.add({ targets: spark, alpha: 0, duration: 220, onComplete: () => spark.destroy() });
-      },
-      onComplete: () => {
-        projectile.destroy();
+    playProjectile(
+      this,
+      cell,
+      unitDef,
+      () => (target.active ? { x: target.x, y: target.y } : null),
+      () => {
         if (!target.active) return;
         this.applyUnitHit(target, unitDef, attack, star);
       },
-    });
+      this.cellSize,
+    );
   }
 
   private applyUnitHit(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number, star = 1): void {
@@ -594,19 +632,10 @@ export class GameScene extends Phaser.Scene {
     const bounceDamage = Math.round(damage * 0.6);
     hit.add(bounceTarget);
 
-    const bolt = this.add.circle(fromX, fromY, px(3), ROLE_ATTACK_COLORS.chain, 1);
-
-    this.tweens.add({
-      targets: bolt,
-      x: bounceTarget.x,
-      y: bounceTarget.y,
-      duration: 120,
-      onComplete: () => {
-        bolt.destroy();
-        if (!bounceTarget.active) return;
-        this.dealDamage(bounceTarget, bounceDamage, '#fff5d6');
-        this.chainBounce(bounceTarget.x, bounceTarget.y, bounceDamage, hit, remaining - 1);
-      },
+    playBolt(this, fromX, fromY, bounceTarget.x, bounceTarget.y, ROLE_ATTACK_COLORS.chain, 120, () => {
+      if (!bounceTarget.active) return;
+      this.dealDamage(bounceTarget, bounceDamage, '#fff5d6');
+      this.chainBounce(bounceTarget.x, bounceTarget.y, bounceDamage, hit, remaining - 1);
     });
   }
 
@@ -680,7 +709,7 @@ export class GameScene extends Phaser.Scene {
     const reward = MONSTER_KINDS[kindId]?.manaReward ?? 1;
 
     this.economy = { ...this.economy, mana: this.economy.mana + reward };
-    this.spawnDeathBurst(target.x, target.y);
+    spawnDeathBurst(this, target.x, target.y, this.cellSize);
     playSfx(kindId === 'boss' ? 'bossDefeat' : 'kill');
 
     this.monsters = this.monsters.filter((m) => m !== target);
@@ -689,39 +718,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnFloatingText(x: number, y: number, message: string, color: string): void {
-    const text = this.add
-      .text(x, y - px(10), message, {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(13)}px`,
-        color,
-      })
-      .setOrigin(0.5);
-
-    this.tweens.add({
-      targets: text,
-      y: y - px(40),
-      alpha: 0,
-      duration: 550,
-      onComplete: () => text.destroy(),
-    });
-  }
-
-  private spawnDeathBurst(x: number, y: number): void {
-    const count = 7;
-    for (let i = 0; i < count; i += 1) {
-      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
-      const distance = this.cellSize * (0.3 + Math.random() * 0.25);
-      const spark = this.add.circle(x, y, px(2.5), 0xf3dc9a, 0.9);
-
-      this.tweens.add({
-        targets: spark,
-        x: x + Math.cos(angle) * distance,
-        y: y + Math.sin(angle) * distance,
-        alpha: 0,
-        duration: 380,
-        onComplete: () => spark.destroy(),
-      });
-    }
+    fxText(this, x, y, message, color);
   }
 
   private layout(): void {
@@ -729,6 +726,7 @@ export class GameScene extends Phaser.Scene {
     this.monsters = [];
     this.confirmModalContainer = undefined;
     this.tutorialContainer = undefined;
+    this.pauseContainer = undefined;
 
     const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#07080d');
@@ -782,6 +780,17 @@ export class GameScene extends Phaser.Scene {
       .on('pointerdown', () => this.confirmExit());
     exitButton.setPadding(px(6), px(6), px(6), px(6));
 
+    this.add
+      .text(width - px(12), headerHeight * 0.4, '⏸ 일시정지', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(15)}px`,
+        color: '#ffd98a',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.setPaused(true));
+
     this.nicknameText = this.add
       .text(px(12), headerHeight * 0.78, this.currentNickname ? `${this.currentNickname}님` : '', {
         fontFamily: TITLE_FONT,
@@ -802,6 +811,7 @@ export class GameScene extends Phaser.Scene {
     this.refreshMana();
 
     if (this.gameOver) this.showGameOverOverlay();
+    if (this.paused) this.showPauseOverlay();
   }
 
   private refreshHud(): void {
@@ -852,33 +862,9 @@ export class GameScene extends Phaser.Scene {
     return curve;
   }
 
+  // 몬스터 길은 움직이지 않으므로 이미지 한 장으로 구워서 쓴다(도형을 매 프레임 그리면 무겁다).
   private drawPath(curve: Phaser.Curves.Path): void {
-    const samples = curve.getPoints(64);
-
-    const outer = this.add.graphics();
-    outer.lineStyle(px(9), 0x8a6a2c, 0.55);
-    this.strokeThroughPoints(outer, samples);
-
-    const inner = this.add.graphics();
-    inner.lineStyle(px(3), 0xd4b36a, 0.9);
-    this.strokeThroughPoints(inner, samples);
-
-    curve
-      .getSpacedPoints(40)
-      .forEach((p) => {
-        const dot = this.add.graphics();
-        dot.fillStyle(0xf3dc9a, 0.9);
-        dot.fillCircle(p.x, p.y, px(2.5));
-      });
-  }
-
-  private strokeThroughPoints(graphics: Phaser.GameObjects.Graphics, points: Phaser.Math.Vector2[]): void {
-    graphics.beginPath();
-    graphics.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) {
-      graphics.lineTo(points[i].x, points[i].y);
-    }
-    graphics.strokePath();
+    bakePathImage(this, curve);
   }
 
   private drawFieldSlots(cells: CellPosition[], cellSize: number): void {
@@ -918,11 +904,7 @@ export class GameScene extends Phaser.Scene {
       const btnWidth = text.width + px(16);
       text.setX(cursorX + px(8));
 
-      const bg = this.add.graphics();
-      bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
-      bg.fillRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
-      bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
-      bg.strokeRoundedRect(cursorX, y - px(11), btnWidth, px(22), px(6));
+      const bg = this.add.image(cursorX + btnWidth / 2, y, speedButtonTexture(this, btnWidth, active));
       this.children.moveBelow(bg, text);
 
       text.setOrigin(0.5, 0.5);
@@ -945,23 +927,7 @@ export class GameScene extends Phaser.Scene {
 
     this.speedButtonRefs.forEach((refs, btnValue) => {
       const active = btnValue === value;
-      refs.bg.clear();
-      refs.bg.fillStyle(active ? 0x2a2416 : 0x1f2536, 1);
-      refs.bg.fillRoundedRect(
-        refs.text.x - refs.text.width / 2 - px(8),
-        refs.text.y - px(11),
-        refs.text.width + px(16),
-        px(22),
-        px(6),
-      );
-      refs.bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x555555, 0.9);
-      refs.bg.strokeRoundedRect(
-        refs.text.x - refs.text.width / 2 - px(8),
-        refs.text.y - px(11),
-        refs.text.width + px(16),
-        px(22),
-        px(6),
-      );
+      refs.bg.setTexture(speedButtonTexture(this, refs.text.width + px(16), active));
       refs.text.setColor(active ? '#ffd98a' : '#8a8272');
     });
   }

@@ -2,15 +2,17 @@ import Phaser from 'phaser';
 import { cellIndex, type CellPosition } from './board';
 import { canAffordSummon, currentSummonCost, spendForSummon, type EconomyState } from './economy';
 import { MAX_ENHANCE_LEVEL, canEnhance, enhanceCost, statMultiplier } from './enhancement';
-import { MAX_STAR, ROLE_ATTACK_COLORS, pickRandomUnit, type UnitDef } from './units';
+import { MAX_STAR, ROLE_ATTACK_COLORS, ROLE_CATEGORIES, ROLE_DESCRIPTIONS, pickRandomUnit, type UnitDef } from './units';
 import { getRarity } from './graphics/gem';
 import { ROLE_SIGILS } from './graphics/sigils';
 import { createGemTexture } from './graphics/texture';
 import { generalAttackMultiplier, generalAttackSpeedBonus, roleMultiplier } from '../meta/research';
 import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { px } from './dpr';
-import { starDamageMultiplier, starEffectMultiplier } from './starBalance';
+import { starDamageMultiplier, starEffectMultiplier, starSpeedMultiplier } from './starBalance';
 import { computeBuffBonuses } from './effectsEngine';
+import { roundedRectTexture } from './fx';
+import { detailLines } from './unitDescription';
 import { playSfx, rarityIndex } from './sfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -26,7 +28,7 @@ export interface PlacedUnitState {
 
 interface ActionButton {
   id: 'summon' | 'random' | 'merge' | 'remove';
-  bg: Phaser.GameObjects.Graphics;
+  bg: Phaser.GameObjects.Image;
   text: Phaser.GameObjects.Text;
   x: number;
   y: number;
@@ -68,6 +70,9 @@ export class PlayerField {
   private selected?: PlacedUnitState;
   private actionButtons: ActionButton[] = [];
   private buffMarks: Phaser.GameObjects.Text[] = [];
+  private buffMarksKey = '';
+  private infoPanel?: Phaser.GameObjects.Container;
+  private infoKey = '';
 
   private pendingPreEconomy?: EconomyState;
   private highlights: Phaser.GameObjects.Arc[] = [];
@@ -148,6 +153,9 @@ export class PlayerField {
     this.highlights = [];
     this.actionButtons = [];
     this.buffMarks = [];
+    this.buffMarksKey = '';
+    this.infoPanel = undefined;
+    this.infoKey = '';
     this.rangeGraphics = this.host.scene.add.graphics();
 
     const { cells } = this.host.geometry();
@@ -175,6 +183,13 @@ export class PlayerField {
 
   // 공속 버프를 받고 있는 유닛 위에 "공속 +N%"를 표시해서, 버프가 실제로 적용되는지 눈으로 볼 수 있게 한다.
   private refreshBuffMarks(): void {
+    // 배치·별·강화가 바뀐 때만 다시 만든다(마나가 바뀔 때마다 부르면 매번 글자를 새로 그려서 무겁다).
+    const key = Array.from(this.placedUnits.entries())
+      .map(([index, placed]) => `${index}:${placed.unit.id}:${placed.star}:${this.enhanceLevels.get(placed.unit.id) ?? 0}`)
+      .join('|');
+    if (key === this.buffMarksKey) return;
+    this.buffMarksKey = key;
+
     this.buffMarks.forEach((mark) => mark.destroy());
     this.buffMarks = [];
 
@@ -695,6 +710,89 @@ export class PlayerField {
 
   // ----- 사거리 보기 (유닛을 누르면 그 유닛의 사거리만 보인다) -----
 
+  // 유닛을 누르면 화면 오른쪽 위에 그 유닛의 이름·등급·능력치·특성 설명을 보여준다. 패널을 누르면 닫힌다.
+  private updateInfoPanel(): void {
+    const placed = this.selected;
+    if (!placed) {
+      this.infoPanel?.destroy(true);
+      this.infoPanel = undefined;
+      this.infoKey = '';
+      return;
+    }
+
+    const unit = placed.unit;
+    const key = `${unit.id}:${placed.star}:${this.enhanceLevels.get(unit.id) ?? 0}`;
+    if (this.infoPanel?.scene && key === this.infoKey) return;
+    this.infoPanel?.destroy(true);
+    this.infoKey = key;
+
+    const scene = this.host.scene;
+    const { width, height } = scene.scale;
+    const rarity = getRarity(unit.rarity);
+    const rarityColor = Phaser.Display.Color.HexStringToColor(rarity.c1).color;
+
+    const panelWidth = Math.min(width * 0.5, px(210));
+    const pad = px(7);
+    const textWidth = panelWidth - pad * 2;
+    const left = width - px(8) - panelWidth;
+    const top = height * 0.2;
+    const maxHeight = height * 0.335 - top;
+
+    const speed = unit.attackSpeed * starSpeedMultiplier(placed.star);
+    const statLine =
+      unit.attack > 0
+        ? `공격 ${this.attackOf(unit, placed.star)} · 속도 ${speed.toFixed(2)} · 사거리 ${unit.range}`
+        : `사거리 ${unit.range}`;
+    const traitLine = `${ROLE_CATEGORIES[unit.role] ?? ''} · ${ROLE_DESCRIPTIONS[unit.role] ?? ''}`;
+    const detail = detailLines(unit).map((line) => `• ${line}`);
+
+    // 패널이 화면의 정해진 칸을 넘지 않도록, 글자를 조금씩 줄이고 그래도 넘으면 뒷줄을 줄인다.
+    const build = (fontScale: number, detailCount: number): Phaser.GameObjects.Text[] => {
+      const make = (text: string, color: string, size: number, bold = false): Phaser.GameObjects.Text =>
+        scene.add
+          .text(left + pad, 0, text, {
+            fontFamily: TITLE_FONT,
+            fontSize: `${px(size * fontScale)}px`,
+            color,
+            fontStyle: bold ? 'bold' : 'normal',
+            wordWrap: { width: textWidth },
+            lineSpacing: px(1),
+          })
+          .setOrigin(0, 0);
+      return [
+        make(`${unit.name}  ${'★'.repeat(placed.star)}`, rarity.c1, 12, true),
+        make(`${rarity.label} · ${statLine}`, '#ffd98a', 10),
+        make(traitLine, '#9fd8ff', 9.5),
+        ...detail.slice(0, detailCount).map((line) => make(line, '#c9c2af', 9.5)),
+      ];
+    };
+    const measure = (texts: Phaser.GameObjects.Text[]): number =>
+      texts.reduce((sum, t) => sum + t.height + px(3), pad * 2 - px(3));
+
+    let texts: Phaser.GameObjects.Text[] = [];
+    let total = 0;
+    for (const [fontScale, count] of [[1, detail.length], [0.9, detail.length], [0.8, detail.length], [0.8, 2], [0.8, 1]] as Array<[number, number]>) {
+      texts.forEach((t) => t.destroy());
+      texts = build(fontScale, count);
+      total = measure(texts);
+      if (total <= maxHeight) break;
+    }
+
+    const panelHeight = Math.min(total, maxHeight);
+    const bg = scene.add
+      .image(left + panelWidth / 2, top + panelHeight / 2, roundedRectTexture(scene, panelWidth, panelHeight, px(8), 0x0d1120, 0.92, rarityColor, px(1.5), `info${rarityColor.toString(16)}`))
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.select(undefined));
+
+    let cursor = top + pad;
+    texts.forEach((t) => {
+      t.setY(cursor);
+      cursor += t.height + px(3);
+    });
+
+    this.infoPanel = scene.add.container(0, 0, [bg, ...texts]).setDepth(600);
+  }
+
   private select(index: number | undefined): void {
     this.selected = index === undefined ? undefined : this.placedUnits.get(index);
     this.refreshRangeOverlay();
@@ -714,7 +812,10 @@ export class PlayerField {
     this.rangeGraphics.clear();
 
     const placed = this.selected;
-    if (!placed) return;
+    if (!placed) {
+      this.updateInfoPanel();
+      return;
+    }
 
     const { cells, boardStep } = this.host.geometry();
     let index: number | undefined;
@@ -723,8 +824,10 @@ export class PlayerField {
     });
     if (index === undefined) {
       this.selected = undefined;
+      this.updateInfoPanel();
       return;
     }
+    this.updateInfoPanel();
 
     const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
     if (!cell) return;
@@ -754,7 +857,7 @@ export class PlayerField {
     this.actionButtons = defs.map((def) => {
       const x = centerX - totalWidth / 2 + w / 2 + def.col * (w + gap);
       const y = topY + rowHeight / 2 + def.row * (rowHeight + gap);
-      const bg = scene.add.graphics();
+      const bg = scene.add.image(x, y, roundedRectTexture(scene, w, rowHeight, px(9), 0x151a28, 0.5, 0x555555, px(2), 'off'));
       const text = scene.add
         .text(x, y, '', { fontFamily: TITLE_FONT, fontSize: `${px(12.5)}px`, fontStyle: 'bold', align: 'center' })
         .setOrigin(0.5);
@@ -825,12 +928,10 @@ export class PlayerField {
       }
 
       const border = highlight ? 0xff9a6a : enabled ? 0xd4b36a : 0x555555;
-      button.bg.clear();
-      button.bg.fillStyle(0x151a28, enabled ? 0.95 : 0.5);
-      button.bg.fillRoundedRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, px(9));
-      button.bg.lineStyle(px(2), border, 0.9);
-      button.bg.strokeRoundedRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, px(9));
-      button.text.setText(label);
+      button.bg.setTexture(
+        roundedRectTexture(this.host.scene, button.w, button.h, px(9), 0x151a28, enabled ? 0.95 : 0.5, border, px(2), `${border.toString(16)}-${enabled ? 1 : 0}`),
+      );
+      if (button.text.text !== label) button.text.setText(label);
       button.text.setColor(enabled ? '#f6e6b4' : '#8a8272');
     });
   }

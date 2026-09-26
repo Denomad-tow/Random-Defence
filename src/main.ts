@@ -13,6 +13,7 @@ import { VersusGameScene } from './scenes/VersusGameScene';
 import { RankingScene } from './scenes/RankingScene';
 import { SoundTestScene } from './scenes/SoundTestScene';
 import { PatchNotesScene } from './scenes/PatchNotesScene';
+import { AchievementsScene } from './scenes/AchievementsScene';
 import { installAudioUnlock } from './core/audio';
 import { installKeyboardInset } from './core/keyboardInset';
 import { installErrorBanner } from './core/errorBanner';
@@ -67,6 +68,7 @@ function startGame(): void {
       RankingScene,
       SoundTestScene,
       PatchNotesScene,
+      AchievementsScene,
     ],
     scale: {
       mode: Phaser.Scale.NONE,

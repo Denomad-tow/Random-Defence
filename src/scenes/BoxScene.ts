@@ -4,6 +4,7 @@ import { loadBoxes, takeBox } from '../meta/boxes';
 import { loadGold } from '../meta/gold';
 import { addToCollection } from '../meta/collection';
 import { flushSnapshot } from '../core/cloudSync';
+import { addStat, flushStats } from '../meta/stats';
 import { playSfx, rarityIndex } from '../core/sfx';
 import { getRarity } from '../core/graphics/gem';
 import { ROLE_SIGILS } from '../core/graphics/sigils';
@@ -129,6 +130,8 @@ export class BoxScene extends Phaser.Scene {
 
     const drawn = openBox(box);
     drawn.forEach((card) => addToCollection(card.unit.id));
+    addStat('boxesOpened');
+    flushStats();
     void flushSnapshot();
     // 뽑힌 카드 중 가장 높은 등급에 맞는 소리를 낸다(SSSR 이상은 특별한 소리).
     playSfx('boxOpen', { rarity: Math.max(...drawn.map((card) => rarityIndex(card.unit.rarity))) });

@@ -13,6 +13,7 @@ import { starDamageMultiplier, starEffectMultiplier, starSpeedMultiplier } from 
 import { computeBuffBonuses } from './effectsEngine';
 import { roundedRectTexture } from './fx';
 import { detailLines } from './unitDescription';
+import { addStat, maxStat } from '../meta/stats';
 import { playSfx, rarityIndex } from './sfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -310,6 +311,7 @@ export class PlayerField {
     this.placedUnits.set(cellIndex(cell.row, cell.col), placed);
     this.drawUnit(cell, placed, true);
     playSfx('summon', { rarity: rarityIndex(placed.unit.rarity) });
+    addStat('summons');
     this.notifyChange();
   }
 
@@ -339,6 +341,7 @@ export class PlayerField {
     this.placedUnits.set(index, this.pendingSummon);
     this.drawUnit(cell, this.pendingSummon, true);
     playSfx('summon', { rarity: rarityIndex(this.pendingSummon.unit.rarity) });
+    addStat('summons');
 
     this.pendingSummon = undefined;
     this.pendingPreEconomy = undefined;
@@ -447,6 +450,8 @@ export class PlayerField {
     if (this.selected === sourcePlaced || this.selected === targetPlaced) this.selected = result;
 
     playSfx('merge', { star: result.star });
+    addStat('merges');
+    maxStat('maxStar', result.star);
     this.playMergeEffect(sourceCell, targetCell, () => {
       this.drawUnit(targetCell, result, true);
       this.refreshActionBar();
@@ -523,7 +528,11 @@ export class PlayerField {
       merges += 1;
       highestStar = Math.max(highestStar, result.star);
     }
-    if (merges > 0) playSfx('merge', { star: highestStar });
+    if (merges > 0) {
+      playSfx('merge', { star: highestStar });
+      addStat('merges', merges);
+      maxStat('maxStar', highestStar);
+    }
 
     changed.forEach((index) => {
       const placed = this.placedUnits.get(index);
@@ -635,6 +644,7 @@ export class PlayerField {
 
     this.host.setEconomy({ ...this.host.economy(), mana: this.host.economy().mana - cost });
     this.enhanceLevels.set(placed.unit.id, level + 1);
+    addStat('enhances');
     this.notifyChange();
 
     this.placedUnits.forEach((entry, entryIndex) => {

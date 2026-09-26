@@ -49,6 +49,8 @@ import { starSpeedMultiplier } from '../core/starBalance';
 import { playBolt, playProjectile, spawnDeathBurst } from '../core/combatVfx';
 import { bakePathImage, fxText, roundedRectTexture, speedButtonTexture } from '../core/fx';
 import { drawStatusRings } from '../core/statusRings';
+import { submitSoloBest } from '../meta/versusRanking';
+import { recordKill, recordRun } from '../meta/stats';
 import { statusFlags } from '../core/effectsEngine';
 import { mountGlobalChat } from '../core/globalChatOverlay';
 
@@ -245,6 +247,8 @@ export class GameScene extends Phaser.Scene {
     const previousBest = this.bestStage;
     this.bestStage = saveBestStage(this.waveState.stage);
     playSfx(this.waveState.stage > previousBest ? 'newRecord' : 'defeat');
+    void submitSoloBest(this.bestStage);
+    recordRun(this.waveState.stage, 'solo');
 
     const reward = computeRunReward(this.waveState.stage);
     addGold(reward.gold);
@@ -711,6 +715,7 @@ export class GameScene extends Phaser.Scene {
     this.economy = { ...this.economy, mana: this.economy.mana + reward };
     spawnDeathBurst(this, target.x, target.y, this.cellSize);
     playSfx(kindId === 'boss' ? 'bossDefeat' : 'kill');
+    recordKill(kindId);
 
     this.monsters = this.monsters.filter((m) => m !== target);
     target.destroy();

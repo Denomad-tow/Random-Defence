@@ -1,13 +1,19 @@
 import Phaser from 'phaser';
-import { fetchLeaderboard, fetchCoopLeaderboard, type LeaderboardRow } from '../meta/versusRanking';
+import {
+  fetchLeaderboard,
+  fetchCoopLeaderboard,
+  fetchSoloLeaderboard,
+  submitSoloBest,
+  type LeaderboardRow,
+} from '../meta/versusRanking';
 import { getCurrentNickname } from '../meta/auth';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const PARTY_SIZES = [2, 3, 4, 5];
 
-type RankingMode = 'versus' | 'coop';
-const MODE_LABELS: Record<RankingMode, string> = { versus: '경쟁전', coop: '협동전' };
+type RankingMode = 'solo' | 'versus' | 'coop';
+const MODE_LABELS: Record<RankingMode, string> = { solo: '개인전', versus: '경쟁전', coop: '협동전' };
 
 // 화면에 그릴 한 줄(경쟁전은 승리 횟수, 협동전은 최고 스테이지가 기록 칸에 들어간다).
 interface RankingRow {
@@ -21,7 +27,7 @@ export class RankingScene extends Phaser.Scene {
   private currentSize = PARTY_SIZES[0];
   private nickname = '';
   private loading = true;
-  private mode: RankingMode = 'versus';
+  private mode: RankingMode = 'solo';
   private rows: RankingRow[] = [];
   private requestToken = 0;
 
@@ -31,7 +37,7 @@ export class RankingScene extends Phaser.Scene {
 
   create(): void {
     this.currentSize = PARTY_SIZES[0];
-    this.mode = 'versus';
+    this.mode = 'solo';
     this.loading = true;
     this.rows = [];
 
@@ -48,14 +54,21 @@ export class RankingScene extends Phaser.Scene {
     this.layout();
 
     const token = ++this.requestToken;
-    const request: Promise<RankingRow[]> =
-      this.mode === 'versus'
-        ? fetchLeaderboard(this.currentSize).then((rows: LeaderboardRow[]) =>
-            rows.map((r) => ({ nickname: r.nickname, record: `${r.wins}승 · ${r.games}판` })),
-          )
-        : fetchCoopLeaderboard(this.currentSize).then((rows) =>
-            rows.map((r) => ({ nickname: r.nickname, record: `최고 ${r.bestStage}스테이지 · ${r.games}판` })),
-          );
+    let request: Promise<RankingRow[]>;
+    if (this.mode === 'solo') {
+      // 내 최고 기록이 서버에 아직 없으면(예전에 세운 기록) 먼저 올린 뒤 순위를 불러온다.
+      request = submitSoloBest()
+        .then(() => fetchSoloLeaderboard())
+        .then((rows) => rows.map((r) => ({ nickname: r.nickname, record: `${r.bestStage} 스테이지` })));
+    } else if (this.mode === 'versus') {
+      request = fetchLeaderboard(this.currentSize).then((rows: LeaderboardRow[]) =>
+        rows.map((r) => ({ nickname: r.nickname, record: `${r.wins}승 · ${r.games}판` })),
+      );
+    } else {
+      request = fetchCoopLeaderboard(this.currentSize).then((rows) =>
+        rows.map((r) => ({ nickname: r.nickname, record: `최고 ${r.bestStage}스테이지 · ${r.games}판` })),
+      );
+    }
 
     void request.then((rows) => {
       if (token !== this.requestToken) return; // 그 사이에 다른 탭을 눌렀으면 무시
@@ -81,7 +94,7 @@ export class RankingScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, height * 0.085, this.mode === 'versus' ? '경쟁전 역대 전적 (승리 횟수)' : '협동전 역대 기록 (최고 도달 스테이지)', {
+      .text(width / 2, height * 0.085, this.mode === 'solo' ? '개인전 최고 도달 스테이지 순위' : this.mode === 'versus' ? '경쟁전 역대 전적 (승리 횟수)' : '협동전 역대 기록 (최고 도달 스테이지)', {
         fontFamily: TITLE_FONT,
         fontSize: `${px(11)}px`,
         color: '#9a917d',
@@ -100,9 +113,10 @@ export class RankingScene extends Phaser.Scene {
       .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
 
     this.drawModeTabs(width, height * 0.13);
-    this.drawSizeTabs(width, height * 0.185);
+    // 인원별 탭은 경쟁전·협동전에만 있다(개인전은 혼자 하는 것이라 인원 구분이 없다).
+    if (this.mode !== 'solo') this.drawSizeTabs(width, height * 0.185);
 
-    const listTop = height * 0.25;
+    const listTop = this.mode === 'solo' ? height * 0.19 : height * 0.25;
     if (this.loading) {
       this.add
         .text(width / 2, listTop + height * 0.1, '불러오는 중...', {
@@ -116,7 +130,7 @@ export class RankingScene extends Phaser.Scene {
 
     if (this.rows.length === 0) {
       this.add
-        .text(width / 2, listTop + height * 0.1, `아직 ${this.currentSize}인 ${MODE_LABELS[this.mode]} 기록이 없어요`, {
+        .text(width / 2, listTop + height * 0.1, this.mode === 'solo' ? '아직 개인전 기록이 없어요' : `아직 ${this.currentSize}인 ${MODE_LABELS[this.mode]} 기록이 없어요`, {
           fontFamily: TITLE_FONT,
           fontSize: `${px(13)}px`,
           color: '#9a917d',
@@ -129,9 +143,9 @@ export class RankingScene extends Phaser.Scene {
   }
 
   private drawModeTabs(width: number, y: number): void {
-    const modes: RankingMode[] = ['versus', 'coop'];
+    const modes: RankingMode[] = ['solo', 'versus', 'coop'];
     const gap = width * 0.02;
-    const tabWidth = (width * 0.96 - gap) / 2;
+    const tabWidth = (width * 0.96 - gap * (modes.length - 1)) / modes.length;
 
     modes.forEach((mode, i) => {
       const x = width * 0.02 + tabWidth / 2 + i * (tabWidth + gap);

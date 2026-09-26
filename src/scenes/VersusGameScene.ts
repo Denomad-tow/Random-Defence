@@ -22,6 +22,7 @@ import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
 import { getCurrentNickname } from '../meta/auth';
 import { computeRunReward, type RunReward } from '../meta/rewards';
 import { recordVersusResult } from '../meta/versusRanking';
+import { recordKill, recordRun } from '../meta/stats';
 import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
 import { flushSnapshot } from '../core/cloudSync';
@@ -409,6 +410,7 @@ export class VersusGameScene extends Phaser.Scene {
   }
 
   private grantMana(kindId: MonsterKindId): void {
+    recordKill(kindId);
     const reward = MONSTER_KINDS[kindId]?.manaReward ?? 1;
     this.economy = { ...this.economy, mana: this.economy.mana + reward };
     this.refreshHud();
@@ -592,6 +594,7 @@ export class VersusGameScene extends Phaser.Scene {
 
     const stage = this.waveState.stage;
     playSfx(won ? 'newRecord' : 'defeat');
+    recordRun(stage, 'versus', won);
     const reward = computeRunReward(stage);
     addGold(reward.gold);
     addBox(reward.boxId, reward.boxCount);

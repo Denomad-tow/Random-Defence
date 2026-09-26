@@ -11,6 +11,7 @@ import { sortByRarityThenLevel } from '../meta/unitSort';
 import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
 import { showInfoModal } from '../core/infoModal';
+import { claimableCount } from '../meta/achievements';
 import { hasUnseenPatch, latestPatch, markPatchSeen, patchToModal } from '../meta/patchNotes';
 import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { showBugReportOverlay } from '../core/bugReportOverlay';
@@ -163,25 +164,27 @@ export class DeckSelectScene extends Phaser.Scene {
     const boxes = loadBoxes();
     const totalBoxes = Object.values(boxes).reduce((sum, n) => sum + n, 0);
 
+    const claimable = claimableCount();
     const navButtons: Array<{ label: string; color: string; onClick: () => void }> = [
       { label: '연구', color: '#a8ffb0', onClick: () => this.scene.start('research') },
       { label: `상자 (${totalBoxes})`, color: '#ffd98a', onClick: () => this.scene.start('box') },
       { label: '컬렉션', color: '#9fd8ff', onClick: () => this.scene.start('collection') },
       { label: '도감', color: '#c9a8ff', onClick: () => this.scene.start('codex') },
+      { label: claimable > 0 ? '업적●' : '업적', color: claimable > 0 ? '#ff9a6a' : '#ffe08a', onClick: () => this.scene.start('achievements') },
       { label: '우편함', color: '#ffb0e0', onClick: () => this.scene.start('mailbox') },
       { label: '파티', color: '#ffcf6b', onClick: () => this.scene.start('party') },
       { label: '순위', color: '#7ef0ff', onClick: () => this.scene.start('ranking') },
       { label: '로그아웃', color: '#ff9a9a', onClick: () => this.handleLogout() },
     ];
 
-    // 버튼이 4열 × 2줄(8개)에 정확히 맞도록 유지한다.
-    const navCols = 4;
+    // 버튼이 5열 × 2줄에 들어가도록 한다(위 줄 5개, 아래 줄 4개).
+    const navCols = 5;
     const navGap = width * 0.025;
     const navSlotWidth = (width * 0.94 - navGap * (navCols - 1)) / navCols;
     const navSlotHeight = height * 0.05;
     // 버튼(상자) 자체 크기는 기존 대비 70%로 줄이되, 칸 간격(navSlotWidth 기준)은
     // 그대로 둬서 버튼 사이에 여백이 생기도록 한다.
-    const navWidth = navSlotWidth * 0.7;
+    const navWidth = navSlotWidth * 0.9;
     const navHeight = navSlotHeight * 0.7;
     const navRowGap = height * 0.015;
     const navStartX = width * 0.03 + navSlotWidth / 2;
@@ -515,7 +518,7 @@ export class DeckSelectScene extends Phaser.Scene {
     this.add
       .text(x, y, label, {
         fontFamily: TITLE_FONT,
-        fontSize: `${px(15)}px`,
+        fontSize: `${px(13)}px`,
         color,
         fontStyle: 'bold',
       })

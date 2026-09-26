@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { flushStats } from '../meta/stats';
 
 // 브라우저(localStorage)에만 있던 게임 데이터를 로그인한 계정에 묶어서
 // Supabase에도 저장한다. 기존 meta/*.ts 저장 로직은 전혀 건드리지 않고,
@@ -15,6 +16,8 @@ const SYNCED_KEYS = [
   'rd_research',
   'rd_best_stage',
   'rd_attendance',
+  'rd_stats',
+  'rd_achv',
 ];
 
 // 이 브라우저에 남아있는 게임 데이터가 어느 계정의 것인지 기억해둔다.
@@ -94,6 +97,7 @@ export async function pullSnapshot(): Promise<void> {
 }
 
 async function pushSnapshot(): Promise<void> {
+  flushStats(); // 메모리에 모아둔 플레이 기록(업적용)을 저장소에 먼저 쓴다
   const userId = await currentUserId();
   if (!userId) return;
 

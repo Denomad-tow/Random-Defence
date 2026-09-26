@@ -21,6 +21,7 @@ import {
 import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
 import { getCurrentNickname } from '../meta/auth';
 import { recordCoopResult } from '../meta/versusRanking';
+import { recordKill, recordRun } from '../meta/stats';
 import { computeRunReward, type RunReward } from '../meta/rewards';
 import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
@@ -231,6 +232,7 @@ export class CoopGameScene extends Phaser.Scene {
   // 몬스터를 잡으면 마나를 번다 (솔로 모드와 동일). 협동전에서는 누가 막타를 쳤든
   // 다 같이 잡은 거라 보고, 그 자리에 있던 파티원 전원의 마나가 함께 오른다.
   private grantMana(kindId: MonsterKindId): void {
+    recordKill(kindId);
     const reward = MONSTER_KINDS[kindId]?.manaReward ?? 1;
     this.economy = { ...this.economy, mana: this.economy.mana + reward };
     this.refreshHud();
@@ -375,6 +377,7 @@ export class CoopGameScene extends Phaser.Scene {
     // 협동전 순위: 참가자 각자가 자기 기록(도달 스테이지)을 남긴다.
     void recordCoopResult(this.members.length, stage, this.nickname);
     playSfx('defeat');
+    recordRun(stage, 'coop');
 
     this.showGameOverOverlay(stage, reward, title);
   }

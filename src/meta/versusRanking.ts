@@ -1,5 +1,7 @@
 import { supabase } from '../core/supabaseClient';
 import type { PartyMode } from './party';
+import { getCurrentNickname } from './auth';
+import { loadBestStage } from './progress';
 
 export interface VersusMatchResult {
   mode: PartyMode;
@@ -97,6 +99,50 @@ export async function fetchCoopLeaderboard(partySize: number): Promise<CoopLeade
     return Array.from(stats.entries())
       .map(([nickname, s]) => ({ nickname, bestStage: s.bestStage, games: s.games }))
       .sort((a, b) => b.bestStage - a.bestStage || b.games - a.games);
+  } catch {
+    return [];
+  }
+}
+
+// ----- 개인전 스테이지 기록 -----
+// 개인전은 "가장 멀리 간 스테이지"로 순위를 매긴다. 서버에는 사람마다 한 줄(최고 스테이지)만 저장하고,
+// 기록이 더 높아졌을 때만 올린다.
+export interface SoloRankingRow {
+  nickname: string;
+  bestStage: number;
+}
+
+export async function submitSoloBest(stage?: number): Promise<void> {
+  try {
+    const nickname = await getCurrentNickname();
+    if (!nickname) return;
+    const best = Math.max(stage ?? 0, loadBestStage());
+    if (best <= 0) return;
+
+    // 처음이면 새로 만들고(이미 있으면 충돌 오류를 무시), 그다음 "더 높을 때만" 갱신한다.
+    await supabase.from('solo_records').insert({ nickname, best_stage: best });
+    await supabase
+      .from('solo_records')
+      .update({ best_stage: best, updated_at: new Date().toISOString() })
+      .eq('nickname', nickname)
+      .lt('best_stage', best);
+  } catch {
+    // 순위 기록은 실패해도 게임 진행에 영향을 주면 안 되니 조용히 무시한다.
+  }
+}
+
+export async function fetchSoloLeaderboard(): Promise<SoloRankingRow[]> {
+  try {
+    const { data, error } = await supabase
+      .from('solo_records')
+      .select('nickname, best_stage')
+      .order('best_stage', { ascending: false })
+      .limit(50);
+    if (error || !data) return [];
+    return (data as Array<{ nickname: string; best_stage: number }>).map((row) => ({
+      nickname: row.nickname,
+      bestStage: row.best_stage,
+    }));
   } catch {
     return [];
   }

@@ -96,3 +96,11 @@ export function generalAttackSpeedBonus(): number {
 export function roleMultiplier(role: string): number {
   return 1 + getRoleLevel(role) * ROLE_BONUS_PER_LEVEL;
 }
+
+// 모든 연구 항목(일반 2개 + 역할별)의 레벨을 더한 값. 업적에서 쓴다.
+export function totalResearchLevels(): number {
+  const state = loadState();
+  const general = Object.values(state.general).reduce((sum, v) => sum + (v ?? 0), 0);
+  const role = Object.values(state.role).reduce((sum, v) => sum + (v ?? 0), 0);
+  return general + role;
+}

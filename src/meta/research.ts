@@ -1,7 +1,7 @@
 import { spendGold } from './gold';
 
 const KEY = 'rd_research';
-export const MAX_RESEARCH_LEVEL = 30;
+export const MAX_RESEARCH_LEVEL = 100;
 
 // "일반 연구": 모든 유닛에게 공통으로 적용되는 전투 능력치.
 export type GeneralResearchKey = 'attack' | 'attackSpeed';

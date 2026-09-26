@@ -1,18 +1,28 @@
 import Phaser from 'phaser';
-import { fetchLeaderboard, type LeaderboardRow } from '../meta/versusRanking';
+import { fetchLeaderboard, fetchCoopLeaderboard, type LeaderboardRow } from '../meta/versusRanking';
 import { getCurrentNickname } from '../meta/auth';
 import { px } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const PARTY_SIZES = [2, 3, 4, 5];
 
-// 6단계(경쟁 파티전) "인원별 순위" 화면. 시즌제(주기적 초기화)는 이번엔 빼고
-// 역대 전적(인원수별 승리 횟수) 순위만 보여준다.
+type RankingMode = 'versus' | 'coop';
+const MODE_LABELS: Record<RankingMode, string> = { versus: '경쟁전', coop: '협동전' };
+
+// 화면에 그릴 한 줄(경쟁전은 승리 횟수, 협동전은 최고 스테이지가 기록 칸에 들어간다).
+interface RankingRow {
+  nickname: string;
+  record: string;
+}
+
+// "인원별 순위" 화면. 경쟁전은 승리 횟수, 협동전은 최고 도달 스테이지로 순위를 매긴다.
+// 시즌제(주기적 초기화)는 아직 없고 역대 기록만 보여준다.
 export class RankingScene extends Phaser.Scene {
   private currentSize = PARTY_SIZES[0];
   private nickname = '';
   private loading = true;
-  private rows: LeaderboardRow[] = [];
+  private mode: RankingMode = 'versus';
+  private rows: RankingRow[] = [];
   private requestToken = 0;
 
   constructor() {
@@ -21,6 +31,7 @@ export class RankingScene extends Phaser.Scene {
 
   create(): void {
     this.currentSize = PARTY_SIZES[0];
+    this.mode = 'versus';
     this.loading = true;
     this.rows = [];
 
@@ -37,7 +48,16 @@ export class RankingScene extends Phaser.Scene {
     this.layout();
 
     const token = ++this.requestToken;
-    void fetchLeaderboard(this.currentSize).then((rows) => {
+    const request: Promise<RankingRow[]> =
+      this.mode === 'versus'
+        ? fetchLeaderboard(this.currentSize).then((rows: LeaderboardRow[]) =>
+            rows.map((r) => ({ nickname: r.nickname, record: `${r.wins}승 · ${r.games}판` })),
+          )
+        : fetchCoopLeaderboard(this.currentSize).then((rows) =>
+            rows.map((r) => ({ nickname: r.nickname, record: `최고 ${r.bestStage}스테이지 · ${r.games}판` })),
+          );
+
+    void request.then((rows) => {
       if (token !== this.requestToken) return; // 그 사이에 다른 탭을 눌렀으면 무시
       this.rows = rows;
       this.loading = false;
@@ -61,7 +81,7 @@ export class RankingScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, height * 0.085, '경쟁 파티전 역대 전적 (시즌제는 준비 중)', {
+      .text(width / 2, height * 0.085, this.mode === 'versus' ? '경쟁전 역대 전적 (승리 횟수)' : '협동전 역대 기록 (최고 도달 스테이지)', {
         fontFamily: TITLE_FONT,
         fontSize: `${px(11)}px`,
         color: '#9a917d',
@@ -79,9 +99,10 @@ export class RankingScene extends Phaser.Scene {
       .setPadding(px(8), px(8), px(8), px(8))
       .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
 
-    this.drawSizeTabs(width, height * 0.15);
+    this.drawModeTabs(width, height * 0.13);
+    this.drawSizeTabs(width, height * 0.185);
 
-    const listTop = height * 0.22;
+    const listTop = height * 0.25;
     if (this.loading) {
       this.add
         .text(width / 2, listTop + height * 0.1, '불러오는 중...', {
@@ -95,7 +116,7 @@ export class RankingScene extends Phaser.Scene {
 
     if (this.rows.length === 0) {
       this.add
-        .text(width / 2, listTop + height * 0.1, `아직 ${this.currentSize}인 경쟁전 기록이 없어요`, {
+        .text(width / 2, listTop + height * 0.1, `아직 ${this.currentSize}인 ${MODE_LABELS[this.mode]} 기록이 없어요`, {
           fontFamily: TITLE_FONT,
           fontSize: `${px(13)}px`,
           color: '#9a917d',
@@ -105,6 +126,41 @@ export class RankingScene extends Phaser.Scene {
     }
 
     this.drawList(width, listTop, height - listTop - height * 0.04);
+  }
+
+  private drawModeTabs(width: number, y: number): void {
+    const modes: RankingMode[] = ['versus', 'coop'];
+    const gap = width * 0.02;
+    const tabWidth = (width * 0.96 - gap) / 2;
+
+    modes.forEach((mode, i) => {
+      const x = width * 0.02 + tabWidth / 2 + i * (tabWidth + gap);
+      const active = mode === this.mode;
+
+      const bg = this.add.graphics();
+      bg.fillStyle(active ? 0x2a2416 : 0x151a28, active ? 1 : 0.85);
+      bg.fillRoundedRect(x - tabWidth / 2, y - px(16), tabWidth, px(32), px(8));
+      bg.lineStyle(px(1.5), active ? 0xd4b36a : 0x3a3a3a, 1);
+      bg.strokeRoundedRect(x - tabWidth / 2, y - px(16), tabWidth, px(32), px(8));
+
+      this.add
+        .text(x, y, MODE_LABELS[mode], {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(14)}px`,
+          color: active ? '#ffd98a' : '#8a8272',
+          fontStyle: active ? 'bold' : 'normal',
+        })
+        .setOrigin(0.5);
+
+      this.add
+        .zone(x, y, tabWidth, px(32))
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          if (this.mode === mode) return;
+          this.mode = mode;
+          this.loadLeaderboard();
+        });
+    });
   }
 
   private drawSizeTabs(width: number, y: number): void {
@@ -177,7 +233,7 @@ export class RankingScene extends Phaser.Scene {
         .setOrigin(0, 0.5);
 
       this.add
-        .text(width * 0.9, y, `${row.wins}승 · ${row.games}판`, {
+        .text(width * 0.9, y, row.record, {
           fontFamily: TITLE_FONT,
           fontSize: `${px(12)}px`,
           color: '#ffd98a',

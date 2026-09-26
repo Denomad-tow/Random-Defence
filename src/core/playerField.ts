@@ -21,6 +21,16 @@ export interface PlacedUnitState {
   label?: Phaser.GameObjects.Text;
 }
 
+interface ActionButton {
+  id: 'summon' | 'random' | 'merge' | 'remove';
+  bg: Phaser.GameObjects.Graphics;
+  text: Phaser.GameObjects.Text;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface ConfirmOptions {
   title: string;
   subtitle: string;
@@ -43,14 +53,17 @@ export interface FieldHost {
   useMetaBonuses: boolean;
 }
 
-// 개인전(GameScene)의 "내 필드 다루기"를 협동전·경쟁전에서도 똑같이 쓰도록 옮긴 것:
-// 소환 후 칸 직접 고르기, 드래그로 이동, 같은 유닛 합성(별), 더블 탭 강화, 사거리 보기,
+// 개인전·협동전·경쟁전이 똑같이 쓰는 "내 필드 다루기":
+// 칸을 골라 소환 / 랜덤 소환, 드래그로 이동, 같은 유닛 합성(별) / 자동 합성,
+// 더블 탭 강화, 유닛 제거, 유닛을 눌러 사거리 보기,
 // 그리고 연구·레벨·강화에 따른 능력치 배율 계산.
 export class PlayerField {
   placedUnits = new Map<number, PlacedUnitState>();
   enhanceLevels = new Map<string, number>();
   pendingSummon?: PlacedUnitState;
-  showRange = false;
+  removeMode = false;
+  private selected?: PlacedUnitState;
+  private actionButtons: ActionButton[] = [];
 
   private pendingPreEconomy?: EconomyState;
   private highlights: Phaser.GameObjects.Arc[] = [];
@@ -59,6 +72,11 @@ export class PlayerField {
   private lastTapTime = 0;
 
   private readonly host: FieldHost;
+
+  private notifyChange(): void {
+    this.host.onEconomyChange();
+    this.refreshActionBar();
+  }
 
   constructor(host: FieldHost) {
     this.host = host;
@@ -117,6 +135,7 @@ export class PlayerField {
   // 씬이 화면을 다시 그린 뒤(모든 오브젝트가 지워진 뒤)에 호출한다.
   afterLayout(): void {
     this.highlights = [];
+    this.actionButtons = [];
     this.rangeGraphics = this.host.scene.add.graphics();
 
     const { cells } = this.host.geometry();
@@ -126,6 +145,8 @@ export class PlayerField {
     });
 
     if (this.pendingSummon) this.enterPlacementMode();
+    if (this.removeMode) this.enterRemoveMode();
+    this.refreshRangeOverlay();
   }
 
   drawUnit(cell: CellPosition, placed: PlacedUnitState, animate = false): void {
@@ -147,6 +168,11 @@ export class PlayerField {
       .on('pointerdown', () => sprite.setData('dragMoved', false))
       .on('pointerup', () => {
         if (sprite.getData('dragMoved')) return;
+        if (this.removeMode) {
+          this.askRemove(index);
+          return;
+        }
+        this.select(index);
         this.registerUnitTap(index);
       });
     sprite.setData('cellIndex', index);
@@ -175,20 +201,23 @@ export class PlayerField {
     return this.host.geometry().cells.some((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
   }
 
-  summonLabel(): string {
-    return this.pendingSummon ? '놓을 칸 선택 (취소)' : `소환 (${currentSummonCost(this.host.economy())}마나)`;
+  private summonCostText(): string {
+    return `${currentSummonCost(this.host.economy())}마나`;
   }
 
+  // 마나가 넉넉하고 빈 칸이 있어서 지금 소환할 수 있는가(칸 선택·랜덤 소환 공통).
   canSummon(): boolean {
-    return !!this.pendingSummon || (canAffordSummon(this.host.economy()) && this.hasEmptyCell());
+    return canAffordSummon(this.host.economy()) && this.hasEmptyCell();
   }
 
+  // "칸 선택 소환": 마나를 먼저 내고, 유닛을 놓을 칸을 직접 고른다. 한 번 더 누르면 취소(마나 환불).
   trySummon(): void {
     if (this.pendingSummon) {
       this.cancelPendingSummon();
       return;
     }
-    if (!canAffordSummon(this.host.economy()) || !this.hasEmptyCell()) return;
+    if (!this.canSummon()) return;
+    this.cancelRemoveMode();
 
     this.pendingPreEconomy = this.host.economy();
     this.host.setEconomy(spendForSummon(this.host.economy()));
@@ -196,8 +225,25 @@ export class PlayerField {
     const unit = pickRandomUnit(this.host.deckPool());
     this.pendingSummon = { unit, star: 1, cooldown: Math.random() * 0.3 };
 
-    this.host.onEconomyChange();
+    this.notifyChange();
     this.enterPlacementMode();
+  }
+
+  // "랜덤 소환": 빈 칸 중 무작위 한 곳에 바로 소환한다. 비용(소환 횟수에 따라 오르는 값)은 칸 선택 소환과 같다.
+  randomSummon(): void {
+    if (this.pendingSummon) return;
+    if (!this.canSummon()) return;
+    this.cancelRemoveMode();
+
+    const { cells } = this.host.geometry();
+    const empty = cells.filter((c) => !this.placedUnits.has(cellIndex(c.row, c.col)));
+    const cell = empty[Math.floor(Math.random() * empty.length)];
+
+    this.host.setEconomy(spendForSummon(this.host.economy()));
+    const placed: PlacedUnitState = { unit: pickRandomUnit(this.host.deckPool()), star: 1, cooldown: Math.random() * 0.3 };
+    this.placedUnits.set(cellIndex(cell.row, cell.col), placed);
+    this.drawUnit(cell, placed, true);
+    this.notifyChange();
   }
 
   cancelPendingSummon(): void {
@@ -210,12 +256,15 @@ export class PlayerField {
     }
 
     this.clearHighlights();
-    this.host.onEconomyChange();
+    this.notifyChange();
   }
 
   // 빈 칸(슬롯)을 탭했을 때 호출한다.
   handleCellTap(cell: CellPosition): void {
-    if (!this.pendingSummon) return;
+    if (!this.pendingSummon) {
+      this.select(undefined);
+      return;
+    }
 
     const index = cellIndex(cell.row, cell.col);
     if (this.placedUnits.has(index)) return;
@@ -226,7 +275,7 @@ export class PlayerField {
     this.pendingSummon = undefined;
     this.pendingPreEconomy = undefined;
     this.clearHighlights();
-    this.host.onEconomyChange();
+    this.notifyChange();
   }
 
   private enterPlacementMode(): void {
@@ -306,6 +355,7 @@ export class PlayerField {
 
     this.drawUnit(targetCell, sourcePlaced);
     if (targetPlaced) this.drawUnit(sourceCell, targetPlaced);
+    this.refreshActionBar();
   }
 
   private mergeUnits(
@@ -324,19 +374,97 @@ export class PlayerField {
     this.placedUnits.delete(sourceIndex);
     this.placedUnits.delete(targetIndex);
 
-    // 합성 결과는 합쳐진 두 유닛과 같은 등급의 덱 유닛 중에서만 무작위로 나온다(개인전과 동일).
-    const rarity = sourcePlaced.unit.rarity;
+    const result = this.createMergeResult(sourcePlaced);
+    this.placedUnits.set(targetIndex, result);
+    if (this.selected === sourcePlaced || this.selected === targetPlaced) this.selected = result;
+
+    this.playMergeEffect(sourceCell, targetCell, () => {
+      this.drawUnit(targetCell, result, true);
+      this.refreshActionBar();
+    });
+  }
+
+  // 합성 결과는 합쳐진 두 유닛과 같은 등급의 덱 유닛 중에서만 무작위로 나온다(개인전과 동일).
+  private createMergeResult(source: PlacedUnitState): PlacedUnitState {
     const pool = this.host.deckPool();
-    const sameRarityPool = pool.filter((u) => u.rarity === rarity);
-    const resultUnit = pickRandomUnit(sameRarityPool.length > 0 ? sameRarityPool : pool);
-    const result: PlacedUnitState = {
-      unit: resultUnit,
-      star: Math.min(MAX_STAR, sourcePlaced.star + 1),
+    const sameRarityPool = pool.filter((u) => u.rarity === source.unit.rarity);
+    return {
+      unit: pickRandomUnit(sameRarityPool.length > 0 ? sameRarityPool : pool),
+      star: Math.min(MAX_STAR, source.star + 1),
       cooldown: Math.random() * 0.3,
     };
-    this.placedUnits.set(targetIndex, result);
+  }
 
-    this.playMergeEffect(sourceCell, targetCell, () => this.drawUnit(targetCell, result, true));
+  private isMergeable(a: PlacedUnitState, b: PlacedUnitState): boolean {
+    return a !== b && a.unit.id === b.unit.id && a.star === b.star && a.star < MAX_STAR;
+  }
+
+  // 지금 합성할 수 있는 쌍의 수(같은 유닛·같은 별끼리 둘씩 묶은 수).
+  mergeablePairCount(): number {
+    const groups = new Map<string, number>();
+    this.placedUnits.forEach((placed) => {
+      if (placed.star >= MAX_STAR) return;
+      const key = `${placed.unit.id}:${placed.star}`;
+      groups.set(key, (groups.get(key) ?? 0) + 1);
+    });
+    let pairs = 0;
+    groups.forEach((count) => {
+      pairs += Math.floor(count / 2);
+    });
+    return pairs;
+  }
+
+  // "자동 합성": 합성할 수 있는 같은 유닛(같은 별)을 짝지어 더 이상 합칠 게 없을 때까지 계속 합친다.
+  autoMerge(): number {
+    if (this.pendingSummon) return 0;
+    this.cancelRemoveMode();
+
+    const { cells, cellSize } = this.host.geometry();
+    const changed = new Set<number>();
+    let merges = 0;
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      const entries = Array.from(this.placedUnits.entries());
+      let found: [number, number] | null = null;
+      for (let i = 0; i < entries.length && !found; i += 1) {
+        for (let j = i + 1; j < entries.length; j += 1) {
+          if (this.isMergeable(entries[i][1], entries[j][1])) {
+            found = [entries[i][0], entries[j][0]];
+            break;
+          }
+        }
+      }
+      if (!found) break;
+
+      const [sourceIndex, targetIndex] = found;
+      const source = this.placedUnits.get(sourceIndex)!;
+      const target = this.placedUnits.get(targetIndex)!;
+      source.sprite?.destroy();
+      source.label?.destroy();
+      target.sprite?.destroy();
+      target.label?.destroy();
+
+      const result = this.createMergeResult(source);
+      if (this.selected === source || this.selected === target) this.selected = result;
+      this.placedUnits.delete(sourceIndex);
+      this.placedUnits.set(targetIndex, result);
+      changed.delete(sourceIndex);
+      changed.add(targetIndex);
+      merges += 1;
+    }
+
+    changed.forEach((index) => {
+      const placed = this.placedUnits.get(index);
+      const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
+      if (placed && cell) {
+        this.drawUnit(cell, placed, true);
+        this.host.floatText(cell.x, cell.y - cellSize * 0.5, '합성!', '#ffe9b0');
+      }
+    });
+
+    this.refreshRangeOverlay();
+    this.refreshActionBar();
+    return merges;
   }
 
   private playMergeEffect(from: CellPosition, to: CellPosition, onComplete: () => void): void {
@@ -435,7 +563,7 @@ export class PlayerField {
 
     this.host.setEconomy({ ...this.host.economy(), mana: this.host.economy().mana - cost });
     this.enhanceLevels.set(placed.unit.id, level + 1);
-    this.host.onEconomyChange();
+    this.notifyChange();
 
     this.placedUnits.forEach((entry, entryIndex) => {
       if (entry.unit.id !== placed.unit.id) return;
@@ -446,30 +574,197 @@ export class PlayerField {
     this.host.floatText(cell.x, cell.y, `강화 Lv.${level + 1}!`, '#ffd98a');
   }
 
-  // ----- 사거리 보기 -----
+  // ----- 유닛 제거 -----
 
-  toggleRange(): boolean {
-    this.showRange = !this.showRange;
+  toggleRemoveMode(): void {
+    if (this.removeMode) {
+      this.cancelRemoveMode();
+      return;
+    }
+    if (this.placedUnits.size === 0) return;
+    this.cancelPendingSummon();
+    this.removeMode = true;
+    this.enterRemoveMode();
+    this.refreshActionBar();
+  }
+
+  private cancelRemoveMode(): void {
+    if (!this.removeMode) return;
+    this.removeMode = false;
+    this.clearHighlights();
+    this.refreshActionBar();
+  }
+
+  private enterRemoveMode(): void {
+    this.clearHighlights();
+    const { cells, cellSize } = this.host.geometry();
+    this.placedUnits.forEach((_placed, index) => {
+      const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
+      if (!cell) return;
+      const ring = this.host.scene.add.circle(cell.x, cell.y, cellSize * 0.5, 0xff6b6b, 0.12);
+      ring.setStrokeStyle(px(2), 0xff6b6b, 0.9);
+      this.host.scene.tweens.add({ targets: ring, alpha: { from: 0.95, to: 0.4 }, duration: 450, yoyo: true, repeat: -1 });
+      this.highlights.push(ring);
+    });
+  }
+
+  private askRemove(index: number): void {
+    const placed = this.placedUnits.get(index);
+    if (!placed) return;
+
+    this.host.confirm({
+      title: `${placed.unit.name} 제거할까요?`,
+      subtitle: '제거한 유닛은 되돌릴 수 없고 마나도 돌려받지 못해요',
+      confirmLabel: '제거',
+      confirmColor: '#ff9a9a',
+      onConfirm: () => this.removeUnit(index),
+    });
+  }
+
+  private removeUnit(index: number): void {
+    const placed = this.placedUnits.get(index);
+    if (!placed) return;
+
+    placed.sprite?.destroy();
+    placed.label?.destroy();
+    this.placedUnits.delete(index);
+    if (this.selected === placed) this.selected = undefined;
+
+    this.removeMode = false;
+    this.clearHighlights();
     this.refreshRangeOverlay();
-    return this.showRange;
+    this.refreshActionBar();
+  }
+
+  // ----- 사거리 보기 (유닛을 누르면 그 유닛의 사거리만 보인다) -----
+
+  private select(index: number | undefined): void {
+    this.selected = index === undefined ? undefined : this.placedUnits.get(index);
+    this.refreshRangeOverlay();
   }
 
   private refreshRangeOverlay(): void {
     if (!this.rangeGraphics || !this.rangeGraphics.active) return;
     this.rangeGraphics.clear();
-    if (!this.showRange) return;
+
+    const placed = this.selected;
+    if (!placed) return;
 
     const { cells, boardStep } = this.host.geometry();
-    this.placedUnits.forEach((placed, index) => {
-      const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
-      if (!cell) return;
+    let index: number | undefined;
+    this.placedUnits.forEach((entry, entryIndex) => {
+      if (entry === placed) index = entryIndex;
+    });
+    if (index === undefined) {
+      this.selected = undefined;
+      return;
+    }
 
-      const radius = placed.unit.range * boardStep;
-      const color = ROLE_ATTACK_COLORS[placed.unit.role] ?? 0x9fd8ff;
-      this.rangeGraphics!.fillStyle(color, 0.07);
-      this.rangeGraphics!.fillCircle(cell.x, cell.y, radius);
-      this.rangeGraphics!.lineStyle(px(1.5), color, 0.55);
-      this.rangeGraphics!.strokeCircle(cell.x, cell.y, radius);
+    const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
+    if (!cell) return;
+
+    const radius = placed.unit.range * boardStep;
+    const color = ROLE_ATTACK_COLORS[placed.unit.role] ?? 0x9fd8ff;
+    this.rangeGraphics.fillStyle(color, 0.1);
+    this.rangeGraphics.fillCircle(cell.x, cell.y, radius);
+    this.rangeGraphics.lineStyle(px(2), color, 0.75);
+    this.rangeGraphics.strokeCircle(cell.x, cell.y, radius);
+  }
+
+  // ----- 아래쪽 버튼 4개(소환 / 랜덤 소환 / 자동 합성 / 유닛 제거) -----
+
+  // 화면 아래에 2×2 버튼을 그린다. topY는 첫 줄의 위쪽 가장자리, rowHeight는 버튼 한 줄 높이.
+  drawActionBar(centerX: number, topY: number, totalWidth: number, rowHeight: number): void {
+    const scene = this.host.scene;
+    const gap = px(8);
+    const w = (totalWidth - gap) / 2;
+    const defs: Array<{ id: ActionButton['id']; col: number; row: number; action: () => void }> = [
+      { id: 'summon', col: 0, row: 0, action: () => this.trySummon() },
+      { id: 'random', col: 1, row: 0, action: () => this.randomSummon() },
+      { id: 'merge', col: 0, row: 1, action: () => this.reportAutoMerge() },
+      { id: 'remove', col: 1, row: 1, action: () => this.toggleRemoveMode() },
+    ];
+
+    this.actionButtons = defs.map((def) => {
+      const x = centerX - totalWidth / 2 + w / 2 + def.col * (w + gap);
+      const y = topY + rowHeight / 2 + def.row * (rowHeight + gap);
+      const bg = scene.add.graphics();
+      const text = scene.add
+        .text(x, y, '', { fontFamily: TITLE_FONT, fontSize: `${px(12.5)}px`, fontStyle: 'bold', align: 'center' })
+        .setOrigin(0.5);
+      scene.add
+        .zone(x, y, w, rowHeight)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          scene.tweens.add({ targets: text, scale: 0.88, duration: 60, yoyo: true, ease: 'Quad.Out' });
+          def.action();
+        });
+      return { id: def.id, bg, text, x, y, w, h: rowHeight };
+    });
+
+    this.refreshActionBar();
+  }
+
+  private reportAutoMerge(): void {
+    const { cellSize } = this.host.geometry();
+    const merges = this.autoMerge();
+    if (merges === 0) {
+      const button = this.actionButtons.find((b) => b.id === 'merge');
+      if (button) this.host.floatText(button.x, button.y - cellSize * 0.6, '합성할 유닛이 없어요', '#9a917d');
+    }
+  }
+
+  // 마나·유닛 수가 바뀔 때마다 버튼 글씨와 색을 갱신한다.
+  refreshActionBar(): void {
+    const affordable = this.canSummon();
+    const full = !this.hasEmptyCell();
+    const pairs = this.mergeablePairCount();
+
+    this.actionButtons.forEach((button) => {
+      if (!button.text.active) return;
+      let label = '';
+      let enabled = false;
+      let highlight = false;
+
+      switch (button.id) {
+        case 'summon':
+          if (this.pendingSummon) {
+            label = '놓을 칸 선택\n(누르면 취소)';
+            enabled = true;
+            highlight = true;
+          } else {
+            label = full ? '칸이 가득 찼어요' : `소환 (칸 선택)\n${this.summonCostText()}`;
+            enabled = affordable;
+          }
+          break;
+        case 'random':
+          label = full ? '칸이 가득 찼어요' : `랜덤 소환\n${this.summonCostText()}`;
+          enabled = affordable && !this.pendingSummon;
+          break;
+        case 'merge':
+          label = pairs > 0 ? `자동 합성\n${pairs}쌍 가능` : '자동 합성\n(가능한 쌍 없음)';
+          enabled = pairs > 0 && !this.pendingSummon;
+          break;
+        case 'remove':
+          if (this.removeMode) {
+            label = '제거할 유닛 선택\n(누르면 취소)';
+            enabled = true;
+            highlight = true;
+          } else {
+            label = full ? '유닛 제거\n(칸이 가득 참)' : '유닛 제거';
+            enabled = this.placedUnits.size > 0;
+          }
+          break;
+      }
+
+      const border = highlight ? 0xff9a6a : enabled ? 0xd4b36a : 0x555555;
+      button.bg.clear();
+      button.bg.fillStyle(0x151a28, enabled ? 0.95 : 0.5);
+      button.bg.fillRoundedRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, px(9));
+      button.bg.lineStyle(px(2), border, 0.9);
+      button.bg.strokeRoundedRect(button.x - button.w / 2, button.y - button.h / 2, button.w, button.h, px(9));
+      button.text.setText(label);
+      button.text.setColor(enabled ? '#f6e6b4' : '#8a8272');
     });
   }
 }

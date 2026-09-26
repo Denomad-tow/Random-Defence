@@ -14,18 +14,18 @@ export interface MapPreset {
 }
 
 export const MAP_PRESETS: MapPreset[] = [
-  { id: 'zigzag-wide', name: '큰 지그재그', waypoints: [{ gapCol: 3, gapRow: 0 }, { gapCol: 1, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 2, gapRow: 3 }] },
-  { id: 'zigzag-wide-rev', name: '역 큰 지그재그', waypoints: [{ gapCol: 2, gapRow: 0 }, { gapCol: 4, gapRow: 1 }, { gapCol: 1, gapRow: 2 }, { gapCol: 3, gapRow: 3 }] },
-  { id: 'stairs-right', name: '오른쪽 계단', waypoints: [{ gapCol: 1, gapRow: 0 }, { gapCol: 2, gapRow: 1 }, { gapCol: 3, gapRow: 2 }, { gapCol: 4, gapRow: 3 }] },
-  { id: 'stairs-left', name: '왼쪽 계단', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 3, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 1, gapRow: 3 }] },
-  { id: 'center-column', name: '중앙 통로', waypoints: [{ gapCol: 3, gapRow: 0 }, { gapCol: 3, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 3, gapRow: 3 }] },
-  { id: 'left-column', name: '왼쪽 통로', waypoints: [{ gapCol: 1, gapRow: 0 }, { gapCol: 1, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 1, gapRow: 3 }] },
-  { id: 'right-column', name: '오른쪽 통로', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 4, gapRow: 1 }, { gapCol: 3, gapRow: 2 }, { gapCol: 4, gapRow: 3 }] },
-  { id: 'w-shape', name: 'W자 길', waypoints: [{ gapCol: 2, gapRow: 0 }, { gapCol: 4, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 4, gapRow: 3 }] },
-  { id: 'm-shape', name: 'M자 길', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 2, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 2, gapRow: 3 }] },
-  { id: 'edge-left', name: '왼쪽 지그재그', waypoints: [{ gapCol: 1, gapRow: 0 }, { gapCol: 3, gapRow: 1 }, { gapCol: 1, gapRow: 2 }, { gapCol: 4, gapRow: 3 }] },
-  { id: 'edge-right', name: '오른쪽 지그재그', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 2, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 1, gapRow: 3 }] },
-  { id: 'spiral', name: '소용돌이 길', waypoints: [{ gapCol: 2, gapRow: 0 }, { gapCol: 1, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 3, gapRow: 3 }] },
+  { id: 'zigzag-wide', name: '큰 지그재그', waypoints: [{ gapCol: 3, gapRow: 0 }, { gapCol: 1, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 2, gapRow: 3 }, { gapCol: 4, gapRow: 4 }] },
+  { id: 'zigzag-wide-rev', name: '역 큰 지그재그', waypoints: [{ gapCol: 2, gapRow: 0 }, { gapCol: 4, gapRow: 1 }, { gapCol: 1, gapRow: 2 }, { gapCol: 3, gapRow: 3 }, { gapCol: 1, gapRow: 4 }] },
+  { id: 'stairs-right', name: '오른쪽 계단', waypoints: [{ gapCol: 1, gapRow: 0 }, { gapCol: 2, gapRow: 1 }, { gapCol: 3, gapRow: 2 }, { gapCol: 4, gapRow: 3 }, { gapCol: 2, gapRow: 4 }] },
+  { id: 'stairs-left', name: '왼쪽 계단', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 3, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 1, gapRow: 3 }, { gapCol: 3, gapRow: 4 }] },
+  { id: 'center-column', name: '중앙 통로', waypoints: [{ gapCol: 3, gapRow: 0 }, { gapCol: 3, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 3, gapRow: 3 }, { gapCol: 1, gapRow: 4 }] },
+  { id: 'left-column', name: '왼쪽 통로', waypoints: [{ gapCol: 1, gapRow: 0 }, { gapCol: 1, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 1, gapRow: 3 }, { gapCol: 3, gapRow: 4 }] },
+  { id: 'right-column', name: '오른쪽 통로', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 4, gapRow: 1 }, { gapCol: 3, gapRow: 2 }, { gapCol: 4, gapRow: 3 }, { gapCol: 2, gapRow: 4 }] },
+  { id: 'w-shape', name: 'W자 길', waypoints: [{ gapCol: 2, gapRow: 0 }, { gapCol: 4, gapRow: 1 }, { gapCol: 2, gapRow: 2 }, { gapCol: 4, gapRow: 3 }, { gapCol: 2, gapRow: 4 }] },
+  { id: 'm-shape', name: 'M자 길', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 2, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 2, gapRow: 3 }, { gapCol: 4, gapRow: 4 }] },
+  { id: 'edge-left', name: '왼쪽 지그재그', waypoints: [{ gapCol: 1, gapRow: 0 }, { gapCol: 3, gapRow: 1 }, { gapCol: 1, gapRow: 2 }, { gapCol: 4, gapRow: 3 }, { gapCol: 2, gapRow: 4 }] },
+  { id: 'edge-right', name: '오른쪽 지그재그', waypoints: [{ gapCol: 4, gapRow: 0 }, { gapCol: 2, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 1, gapRow: 3 }, { gapCol: 3, gapRow: 4 }] },
+  { id: 'spiral', name: '소용돌이 길', waypoints: [{ gapCol: 2, gapRow: 0 }, { gapCol: 1, gapRow: 1 }, { gapCol: 4, gapRow: 2 }, { gapCol: 3, gapRow: 3 }, { gapCol: 1, gapRow: 4 }] },
 ];
 
 export function pickRandomMapPreset(): MapPreset {

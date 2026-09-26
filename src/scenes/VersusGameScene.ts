@@ -24,6 +24,7 @@ import { computeRunReward, type RunReward } from '../meta/rewards';
 import { recordVersusResult } from '../meta/versusRanking';
 import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
+import { flushSnapshot } from '../core/cloudSync';
 import { getBoxType } from '../meta/gacha';
 import {
   createNightSkyGlowTexture,
@@ -130,7 +131,6 @@ export class VersusGameScene extends Phaser.Scene {
 
   private economy: EconomyState = createInitialEconomy();
   private field!: PlayerField;
-  private rangeToggleText?: Phaser.GameObjects.Text;
   private deckUnitIds: string[] = [];
   private nickname = '';
   private chat?: ChatHandle;
@@ -140,9 +140,6 @@ export class VersusGameScene extends Phaser.Scene {
 
   private hudText?: Phaser.GameObjects.Text;
   private opponentsText?: Phaser.GameObjects.Text;
-  private summonButtonBg?: Phaser.GameObjects.Graphics;
-  private summonButtonText?: Phaser.GameObjects.Text;
-  private summonButtonGeom = { x: 0, y: 0, w: 0, h: 0 };
   private confirmModalContainer?: Phaser.GameObjects.Container;
   private gameSpeed = 1;
   private speedButtonRefs = new Map<number, { bg: Phaser.GameObjects.Graphics; text: Phaser.GameObjects.Text }>();
@@ -613,6 +610,7 @@ export class VersusGameScene extends Phaser.Scene {
     const reward = computeRunReward(stage);
     addGold(reward.gold);
     addBox(reward.boxId);
+    void flushSnapshot();
 
     // 등수를 매길 수 있는 경우(승리했거나, 직접 탈락 처리된 경우)에만 순위표에
     // 기록한다. 남이 이겨서 전달받은 것뿐인 방어적인 경로는 등수를 정확히 알 수
@@ -756,17 +754,15 @@ export class VersusGameScene extends Phaser.Scene {
 
     const headerHeight = height * 0.08;
     const fieldTop = height * 0.34;
-    const fieldAreaHeight = height * 0.5;
+    const fieldAreaHeight = height * 0.44;
 
     const boardLayout = computeBoardLayout(width, fieldTop, fieldAreaHeight);
     this.boardCells = getCellPositions(boardLayout);
     this.cellSize = boardLayout.cellSize;
     this.boardStep = boardLayout.cellSize + boardLayout.gap;
 
-    const buttonY = Math.min(height * 0.92, fieldTop + fieldAreaHeight + boardLayout.cellSize * 1.1);
-    const buttonHeight = boardLayout.cellSize * 0.9;
     const naturalFieldBottomY = boardLayout.originY + (FIELD_ROWS - 1) * this.boardStep + boardLayout.cellSize / 2 + boardLayout.gap / 2;
-    this.fieldBottomY = Math.min(naturalFieldBottomY, buttonY - buttonHeight / 2 - boardLayout.cellSize * 0.35);
+    this.fieldBottomY = naturalFieldBottomY;
 
     const pathPoints = this.resolveMapPathPoints(boardLayout, headerHeight);
     this.monsterPath = this.buildCurve(pathPoints);
@@ -776,8 +772,12 @@ export class VersusGameScene extends Phaser.Scene {
 
     this.drawHeader(width, height);
     this.drawSpeedControls(width / 2, headerHeight * 2.0);
-    this.drawRangeToggle(width, headerHeight * 2.0);
-    this.drawSummonButton(width / 2, buttonY, Math.min(boardLayout.cellSize * 3.4, width * 0.6), buttonHeight);
+    this.field.drawActionBar(
+      width / 2,
+      this.fieldBottomY + boardLayout.cellSize * 0.55,
+      Math.min(width * 0.94, px(460)),
+      boardLayout.cellSize * 0.8,
+    );
   }
 
   private confirmExit(): void {
@@ -953,7 +953,7 @@ export class VersusGameScene extends Phaser.Scene {
     this.hudText?.setText(
       `경쟁 전투 (베타) · 스테이지 ${this.waveState.stage} · 몬스터 ${this.myMonsters.length}마리 · 마나 ${this.economy.mana}`,
     );
-    this.refreshSummonButton();
+    this.field?.refreshActionBar();
   }
 
   private refreshOpponentsText(): void {
@@ -1109,70 +1109,6 @@ export class VersusGameScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.field.handleCellTap(cell));
     });
-  }
-
-  private drawRangeToggle(width: number, y: number): void {
-    const on = this.field.showRange;
-    this.rangeToggleText = this.add
-      .text(width - px(12), y, on ? '사거리 끄기' : '사거리 보기', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(12)}px`,
-        color: on ? '#9fd8ff' : '#6a6458',
-      })
-      .setOrigin(1, 0.5)
-      .setInteractive({ useHandCursor: true })
-      .setPadding(px(6), px(6), px(6), px(6))
-      .on('pointerdown', () => {
-        const nowOn = this.field.toggleRange();
-        this.rangeToggleText?.setText(nowOn ? '사거리 끄기' : '사거리 보기');
-        this.rangeToggleText?.setColor(nowOn ? '#9fd8ff' : '#6a6458');
-      });
-  }
-
-  // ----- 소환 -----
-
-  private drawSummonButton(x: number, y: number, width: number, height: number): void {
-    this.summonButtonGeom = { x, y, w: width, h: height };
-    this.summonButtonBg = this.add.graphics();
-    this.summonButtonText = this.add
-      .text(x, y, '', {
-        fontFamily: TITLE_FONT,
-        fontSize: `${px(15)}px`,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
-
-    this.add
-      .zone(x, y, width, height)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.pulseButtonPress(this.summonButtonText);
-        this.field.trySummon();
-      });
-
-    this.refreshSummonButton();
-  }
-
-  // 버튼을 눌렀을 때 살짝 눌리는 느낌을 주는 공용 연출.
-  private pulseButtonPress(target?: Phaser.GameObjects.GameObject & { setScale: (v: number) => unknown }): void {
-    if (!target) return;
-    this.tweens.add({ targets: target, scale: 0.88, duration: 60, yoyo: true, ease: 'Quad.Out' });
-  }
-
-  private refreshSummonButton(): void {
-    if (!this.summonButtonBg || !this.summonButtonText) return;
-    const { x, y, w, h } = this.summonButtonGeom;
-    const affordable = this.field.canSummon();
-
-    this.summonButtonBg.clear();
-    this.summonButtonBg.fillStyle(0x151a28, affordable ? 0.95 : 0.5);
-    this.summonButtonBg.fillRoundedRect(x - w / 2, y - h / 2, w, h, px(10));
-    this.summonButtonBg.lineStyle(px(2), affordable ? 0xd4b36a : 0x555555, 0.9);
-    this.summonButtonBg.strokeRoundedRect(x - w / 2, y - h / 2, w, h, px(10));
-
-    const label = this.field.pendingSummon || this.field.hasEmptyCell() ? this.field.summonLabel() : '필드가 가득 찼어요';
-    this.summonButtonText.setText(label);
-    this.summonButtonText.setColor(affordable ? '#f6e6b4' : '#8a8272');
   }
 
   private createMonsterSprite(kindId: MonsterKindId, speciesId: string, isGift: boolean): Phaser.GameObjects.Image {

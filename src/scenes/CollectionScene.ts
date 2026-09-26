@@ -8,6 +8,8 @@ import { loadGold, spendGold } from '../meta/gold';
 import { getUnitLevel, setUnitLevel, levelUpCost, availableDuplicates, MAX_UNIT_LEVEL } from '../meta/levels';
 import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px, capPx } from '../core/dpr';
+import { showInfoModal } from '../core/infoModal';
+import { unitLevelInfo } from '../core/levelInfo';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const ROWS_PER_PAGE = 5;
@@ -106,6 +108,14 @@ export class CollectionScene extends Phaser.Scene {
     cardBg.fillRoundedRect(cardX, cardTop, cardW, cardH, px(8));
     cardBg.lineStyle(px(1), 0xd4b36a, 0.4);
     cardBg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(8));
+
+    // 카드를 누르면 "레벨업하면 뭐가 좋아지는지" 안내 팝업(레벨업 버튼은 이 위에 겹쳐 있어 따로 눌린다).
+    this.add
+      .zone(cardX + cardW / 2, cardTop + cardH / 2, cardW, cardH)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () =>
+        showInfoModal(this, unitLevelInfo(unit, getUnitLevel(unit.id), this.ownedCounts.get(unit.id) ?? 0)),
+      );
 
     // Balanced 3-part layout: icon (left) / name+trait+level (center) /
     // level-up button (right). Icon and button are vertically centered on
@@ -309,7 +319,7 @@ export class CollectionScene extends Phaser.Scene {
   }
 
   private refreshGold(): void {
-    this.goldText?.setText(`골드 ${loadGold()}`);
+    this.goldText?.setText(`골드 ${loadGold()}  ·  카드를 눌러 효과 보기`);
   }
 
   private showToast(message: string): void {

@@ -7,7 +7,7 @@ export const MAX_RESEARCH_LEVEL = 30;
 export type GeneralResearchKey = 'attack' | 'attackSpeed';
 export const GENERAL_RESEARCH_KEYS: GeneralResearchKey[] = ['attack', 'attackSpeed'];
 
-const GENERAL_BONUS_PER_LEVEL: Record<GeneralResearchKey, number> = {
+export const GENERAL_BONUS_PER_LEVEL: Record<GeneralResearchKey, number> = {
   attack: 0.05, // 레벨당 전체 공격력 +5%
   attackSpeed: 0.04, // 레벨당 전체 공격속도 +4%
 };
@@ -19,7 +19,7 @@ const GENERAL_LABEL: Record<GeneralResearchKey, string> = {
 
 // "역할 연구": 역할(특성)별로 그 역할의 위력을 강화한다. 공격력뿐 아니라
 // 둔화/중독/방어력 감소처럼 값(value)을 가진 상태 효과의 수치도 같이 커진다.
-const ROLE_BONUS_PER_LEVEL = 0.06;
+export const ROLE_BONUS_PER_LEVEL = 0.06;
 
 interface ResearchState {
   general: Partial<Record<GeneralResearchKey, number>>;

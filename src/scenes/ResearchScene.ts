@@ -15,6 +15,8 @@ import {
   researchCost,
   type GeneralResearchKey,
 } from '../meta/research';
+import { showInfoModal } from '../core/infoModal';
+import { generalResearchInfo, roleResearchInfo } from '../core/levelInfo';
 import { px, capPx } from '../core/dpr';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -103,6 +105,11 @@ export class ResearchScene extends Phaser.Scene {
     bg.strokeRoundedRect(x - cardW / 2, y - cardH / 2, cardW, cardH, px(8));
 
     const level = getGeneralLevel(key);
+    // 카드를 누르면 "연구하면 뭐가 좋아지는지" 안내 팝업(연구 버튼은 이 위에 겹쳐 따로 눌린다).
+    this.add
+      .zone(x, y, cardW, cardH)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => showInfoModal(this, generalResearchInfo(key, getGeneralLevel(key))));
     const labelX = x - cardW / 2 + cardW * 0.06;
 
     // 버튼 글씨 크기는 버튼 크기에서 계산한 값을 그대로 쓰고, 이름/레벨
@@ -153,6 +160,13 @@ export class ResearchScene extends Phaser.Scene {
     bg.fillRoundedRect(cardX, cardTop, cardW, cardH, px(8));
     bg.lineStyle(px(1), 0xd4b36a, 0.4);
     bg.strokeRoundedRect(cardX, cardTop, cardW, cardH, px(8));
+
+    this.add
+      .zone(cardX + cardW / 2, cardTop + cardH / 2, cardW, cardH)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () =>
+        showInfoModal(this, roleResearchInfo(ROLE_SIGILS[role]?.label ?? role, getRoleLevel(role))),
+      );
 
     const iconAreaWidth = cardW * 0.3;
     const buttonAreaWidth = cardW * 0.34;
@@ -275,7 +289,7 @@ export class ResearchScene extends Phaser.Scene {
   }
 
   private refreshGold(): void {
-    this.goldText?.setText(`골드 ${loadGold()}`);
+    this.goldText?.setText(`골드 ${loadGold()}  ·  카드를 눌러 효과 보기`);
   }
 
   private showToast(message: string): void {

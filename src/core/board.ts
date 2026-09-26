@@ -1,4 +1,4 @@
-export const FIELD_ROWS = 3;
+export const FIELD_ROWS = 4;
 export const FIELD_COLS = 5;
 
 export interface BoardLayout {

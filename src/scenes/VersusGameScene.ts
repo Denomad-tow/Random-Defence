@@ -366,6 +366,7 @@ export class VersusGameScene extends Phaser.Scene {
           ),
         );
       },
+      this.cellSize,
     );
   }
 

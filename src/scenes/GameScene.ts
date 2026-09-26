@@ -47,6 +47,7 @@ import { px } from '../core/dpr';
 import { PlayerField, type PlacedUnitState } from '../core/playerField';
 import { playSfx } from '../core/sfx';
 import { starSpeedMultiplier } from '../core/starBalance';
+import { projectileStart } from '../core/combatVfx';
 import { mountGlobalChat } from '../core/globalChatOverlay';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -457,12 +458,15 @@ export class GameScene extends Phaser.Scene {
     const targetX = target.x;
     const targetY = target.y;
 
+    // 발사체가 유닛 한가운데서 나가면 유닛 모양이 가려져서, 목표 방향으로 유닛 가장자리에서 출발시킨다.
+    const start = projectileStart(cell, { x: targetX, y: targetY }, this.cellSize);
+
     if (rarity.glow > 0.25) {
-      const glow = this.add.circle(cell.x, cell.y, px(9) * vfxScale, color, 0.35);
+      const glow = this.add.circle(start.x, start.y, px(9) * vfxScale, color, 0.35);
       this.tweens.add({ targets: glow, alpha: 0, scale: 1.6, duration: 200, onComplete: () => glow.destroy() });
     }
 
-    const projectile = this.add.circle(cell.x, cell.y, px(4) * vfxScale, color, 1);
+    const projectile = this.add.circle(start.x, start.y, px(4) * vfxScale, color, 1);
     const trailCount = Math.min(4, rarity.sparkleCount);
 
     this.tweens.add({

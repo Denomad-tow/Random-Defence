@@ -603,6 +603,7 @@ export class CoopGameScene extends Phaser.Scene {
           playSfx('hit');
         }
       },
+      this.cellSize,
     );
   }
 

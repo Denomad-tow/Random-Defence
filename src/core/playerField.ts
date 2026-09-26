@@ -10,6 +10,7 @@ import { generalAttackMultiplier, generalAttackSpeedBonus, roleMultiplier } from
 import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { px } from './dpr';
 import { starDamageMultiplier, starEffectMultiplier } from './starBalance';
+import { computeBuffBonuses } from './effectsEngine';
 import { playSfx, rarityIndex } from './sfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -66,6 +67,7 @@ export class PlayerField {
   removeMode = false;
   private selected?: PlacedUnitState;
   private actionButtons: ActionButton[] = [];
+  private buffMarks: Phaser.GameObjects.Text[] = [];
 
   private pendingPreEconomy?: EconomyState;
   private highlights: Phaser.GameObjects.Arc[] = [];
@@ -145,6 +147,7 @@ export class PlayerField {
   afterLayout(): void {
     this.highlights = [];
     this.actionButtons = [];
+    this.buffMarks = [];
     this.rangeGraphics = this.host.scene.add.graphics();
 
     const { cells } = this.host.geometry();
@@ -156,6 +159,45 @@ export class PlayerField {
     if (this.pendingSummon) this.enterPlacementMode();
     if (this.removeMode) this.enterRemoveMode();
     this.refreshRangeOverlay();
+    this.refreshBuffMarks();
+  }
+
+  // 버프 유닛 범위 안에 있는 유닛이 받는 공격속도 보너스(칸 번호 → 보너스). 전투 계산과 같은 계산을 쓴다.
+  buffBonuses(): Map<number, number> {
+    const { cells, boardStep } = this.host.geometry();
+    const sources: Array<{ index: number; unit: UnitDef; x: number; y: number; multiplier: number }> = [];
+    this.placedUnits.forEach((placed, index) => {
+      const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
+      if (cell) sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y, multiplier: this.effectMultiplier(placed.unit, placed.star) });
+    });
+    return computeBuffBonuses(sources, boardStep);
+  }
+
+  // 공속 버프를 받고 있는 유닛 위에 "공속 +N%"를 표시해서, 버프가 실제로 적용되는지 눈으로 볼 수 있게 한다.
+  private refreshBuffMarks(): void {
+    this.buffMarks.forEach((mark) => mark.destroy());
+    this.buffMarks = [];
+
+    const { cells, cellSize } = this.host.geometry();
+    this.buffBonuses().forEach((bonus, index) => {
+      if (bonus <= 0) return;
+      const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
+      if (!cell) return;
+      const mark = this.host.scene.add
+        .text(cell.x, cell.y - cellSize * 0.5, `⚡공속+${Math.round(bonus * 100)}%`, {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(10)}px`,
+          color: '#9bf0a8',
+          fontStyle: 'bold',
+          backgroundColor: 'rgba(8,20,12,0.7)',
+          padding: { left: px(3), right: px(3), top: px(1), bottom: px(1) },
+        })
+        .setOrigin(0.5)
+        .setDepth(5);
+      const sceneWidth = this.host.scene.scale.width;
+      mark.x = Phaser.Math.Clamp(mark.x, mark.width / 2 + px(2), sceneWidth - mark.width / 2 - px(2));
+      this.buffMarks.push(mark);
+    });
   }
 
   drawUnit(cell: CellPosition, placed: PlacedUnitState, animate = false): void {
@@ -740,6 +782,7 @@ export class PlayerField {
 
   // 마나·유닛 수가 바뀔 때마다 버튼 글씨와 색을 갱신한다.
   refreshActionBar(): void {
+    this.refreshBuffMarks();
     const affordable = this.canSummon();
     const full = !this.hasEmptyCell();
     const pairs = this.mergeablePairCount();

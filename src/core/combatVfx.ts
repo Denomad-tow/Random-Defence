@@ -7,15 +7,27 @@ import { px } from './dpr';
 // 개인전(GameScene)과 똑같은 공격·처치 연출을 협동전·경쟁전에서도 쓰기 위한 공용 함수들.
 
 // 유닛에서 몬스터까지 날아가는 발사체. 등급이 높을수록 크고 반짝인다. 도착하면 onArrive를 부른다.
+// 발사체가 유닛 한가운데서 나가면 유닛 모양이 가려지므로, 목표 방향으로 유닛 가장자리 바깥에서 출발시킨다.
+export function projectileStart(from: { x: number; y: number }, target: { x: number; y: number }, cellSize: number): { x: number; y: number } {
+  const dx = target.x - from.x;
+  const dy = target.y - from.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 1) return { x: from.x, y: from.y };
+  const offset = Math.min(cellSize * 0.5, dist * 0.5);
+  return { x: from.x + (dx / dist) * offset, y: from.y + (dy / dist) * offset };
+}
+
 export function playProjectile(
   scene: Phaser.Scene,
-  from: CellPosition,
+  cellFrom: CellPosition,
   unit: UnitDef,
   getTarget: () => { x: number; y: number } | null,
   onArrive: () => void,
+  cellSize: number,
 ): void {
   const target = getTarget();
   if (!target) return;
+  const from = projectileStart(cellFrom, target, cellSize);
 
   const color = ROLE_ATTACK_COLORS[unit.role] ?? 0xffffff;
   const rarity = getRarity(unit.rarity);

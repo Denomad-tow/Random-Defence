@@ -9,6 +9,7 @@ import { createGemTexture } from './graphics/texture';
 import { generalAttackMultiplier, generalAttackSpeedBonus, roleMultiplier } from '../meta/research';
 import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { px } from './dpr';
+import { starDamageMultiplier, starEffectMultiplier } from './starBalance';
 import { playSfx, rarityIndex } from './sfx';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
@@ -92,13 +93,20 @@ export class PlayerField {
     return enhance * levelStatMultiplier(getUnitLevel(unit.id)) * generalAttackMultiplier() * roleMultiplier(unit.role);
   }
 
-  attackOf(unit: UnitDef): number {
-    return Math.round(unit.attack * this.totalMultiplier(unit));
+  // 합성한 별까지 반영한 실제 공격력(별이 오를수록 크게 커진다).
+  attackOf(unit: UnitDef, star = 1): number {
+    return Math.round(unit.attack * this.totalMultiplier(unit) * starDamageMultiplier(star));
   }
 
-  // 감속·독·방어 감소 수치에 곱하는 배율(연구 직업 레벨).
-  statusMagnitude(unit: UnitDef): number {
-    return this.host.useMetaBonuses ? roleMultiplier(unit.role) : 1;
+  // 버프·냉기 결계·마나 생성 수치에 곱하는 배율(강화·레벨·연구 + 별 보너스는 완만하게).
+  effectMultiplier(unit: UnitDef, star = 1): number {
+    return this.totalMultiplier(unit) * starEffectMultiplier(star);
+  }
+
+  // 둔화·방어력 감소 수치에 곱하는 배율(연구 직업 레벨 + 별 보너스는 완만하게).
+  statusMagnitude(unit: UnitDef, star = 1): number {
+    const research = this.host.useMetaBonuses ? roleMultiplier(unit.role) : 1;
+    return research * starEffectMultiplier(star);
   }
 
   // 연구의 "공격속도" 보너스.
@@ -648,6 +656,15 @@ export class PlayerField {
   private select(index: number | undefined): void {
     this.selected = index === undefined ? undefined : this.placedUnits.get(index);
     this.refreshRangeOverlay();
+
+    // 합성으로 별이 오른 유닛은 지금 공격력이 얼마인지 잠깐 보여준다.
+    const placed = this.selected;
+    if (!placed || placed.star <= 1 || index === undefined) return;
+    const { cells, cellSize } = this.host.geometry();
+    const cell = cells.find((c) => cellIndex(c.row, c.col) === index);
+    if (cell) {
+      this.host.floatText(cell.x, cell.y - cellSize * 0.6, `${'★'.repeat(placed.star)} 공격력 ${this.attackOf(placed.unit, placed.star)}`, '#ffe9b0');
+    }
   }
 
   private refreshRangeOverlay(): void {

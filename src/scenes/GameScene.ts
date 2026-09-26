@@ -33,7 +33,7 @@ import { addBox } from '../meta/boxes';
 import { flushSnapshot } from '../core/cloudSync';
 import { getBoxType } from '../meta/gacha';
 import { computeRunReward, type RunReward } from '../meta/rewards';
-import { generalAttackSpeedBonus, roleMultiplier } from '../meta/research';
+import { generalAttackSpeedBonus } from '../meta/research';
 import { getCurrentNickname } from '../meta/auth';
 import { hasTutorialSeen, markTutorialSeen } from '../meta/tutorial';
 import { getRarity } from '../core/graphics/gem';
@@ -336,7 +336,7 @@ export class GameScene extends Phaser.Scene {
 
       const rangePx = placed.unit.range * this.boardStep;
       const bonus = (buffBonuses.get(index) ?? 0) + generalAttackSpeedBonus();
-      const attack = Math.round(placed.unit.attack * this.totalMultiplier(placed.unit));
+      const attack = this.field.attackOf(placed.unit, placed.star);
 
       if (placed.unit.effects.some((e) => e.type === 'multishot')) {
         const effect = placed.unit.effects.find((e) => e.type === 'multishot');
@@ -344,7 +344,7 @@ export class GameScene extends Phaser.Scene {
         const targets = this.findNearestMonsters(cell.x, cell.y, rangePx, shotCount);
         if (targets.length === 0) return;
         placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
-        targets.forEach((target) => this.performAttack(cell, target, placed.unit, attack));
+        targets.forEach((target) => this.performAttack(cell, target, placed.unit, attack, placed.star));
         return;
       }
 
@@ -352,7 +352,7 @@ export class GameScene extends Phaser.Scene {
       if (!target) return;
 
       placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
-      this.performAttack(cell, target, placed.unit, attack);
+      this.performAttack(cell, target, placed.unit, attack, placed.star);
     });
   }
 
@@ -364,7 +364,7 @@ export class GameScene extends Phaser.Scene {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      const value = ((effect?.value as number) ?? 0.2) * this.totalMultiplier(placed.unit);
+      const value = ((effect?.value as number) ?? 0.2) * this.field.effectMultiplier(placed.unit, placed.star);
       const rangePx = placed.unit.range * this.boardStep;
 
       this.monsters.forEach((monster) => {
@@ -387,7 +387,7 @@ export class GameScene extends Phaser.Scene {
       const bufferCell = this.boardCells.find((c) => cellIndex(c.row, c.col) === buffIndex);
       if (!bufferCell) return;
 
-      const value = ((effect?.value as number) ?? 0) * this.totalMultiplier(buffer.unit);
+      const value = ((effect?.value as number) ?? 0) * this.field.effectMultiplier(buffer.unit, buffer.star);
       const rangePx = buffer.unit.range * this.boardStep;
 
       this.field.placedUnits.forEach((_ally, allyIndex) => {
@@ -407,7 +407,7 @@ export class GameScene extends Phaser.Scene {
   private performGoldGen(cell: CellPosition, placed: PlacedUnit): void {
     const effect = placed.unit.effects[0];
     const interval = (effect?.interval as number) ?? 2;
-    const value = Math.round(((effect?.value as number) ?? 1) * this.totalMultiplier(placed.unit));
+    const value = Math.round(((effect?.value as number) ?? 1) * this.field.effectMultiplier(placed.unit, placed.star));
 
     placed.cooldown = interval;
     this.economy = { ...this.economy, mana: this.economy.mana + value };
@@ -447,6 +447,7 @@ export class GameScene extends Phaser.Scene {
     target: Phaser.GameObjects.Image,
     unitDef: UnitDef,
     attack: number,
+    star = 1,
   ): void {
     playSfx('attack', { role: unitDef.role });
     const color = ROLE_ATTACK_COLORS[unitDef.role] ?? 0xffffff;
@@ -476,18 +477,18 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => {
         projectile.destroy();
         if (!target.active) return;
-        this.applyUnitHit(target, unitDef, attack);
+        this.applyUnitHit(target, unitDef, attack, star);
       },
     });
   }
 
-  private applyUnitHit(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number): void {
+  private applyUnitHit(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number, star = 1): void {
     const damage = this.computeHitDamage(target, unitDef, attack);
     this.dealDamage(target, damage, '#fff5d6');
     this.applyManaLeech(unitDef);
     if (!target.active) return;
 
-    this.applyRoleEffect(target, unitDef);
+    this.applyRoleEffect(target, unitDef, attack, star);
 
     const aoeEffect = unitDef.effects.find((e) => e.type === 'aoe');
     if (aoeEffect) {
@@ -604,26 +605,28 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private applyRoleEffect(target: Phaser.GameObjects.Image, unitDef: UnitDef): void {
+  private applyRoleEffect(target: Phaser.GameObjects.Image, unitDef: UnitDef, attack: number, star: number): void {
     const statusTypes = ['slow', 'stun', 'poison', 'armorBreak'];
-    const magnitude = roleMultiplier(unitDef.role);
+    const magnitude = this.field.statusMagnitude(unitDef, star);
+    // 독은 시간에 걸친 "피해"라서 공격력이 커지는 만큼(강화·레벨·연구·합성 별) 같이 커진다.
+    const poisonScale = unitDef.attack > 0 ? attack / unitDef.attack : 1;
 
     unitDef.effects
       .filter((effect) => statusTypes.includes(effect.type))
       .forEach((effect) => {
-        this.applyStatusEffect(target, effect, magnitude);
+        this.applyStatusEffect(target, effect, magnitude, poisonScale);
 
         const extraTargets = ((effect.targets as number) ?? 1) - 1;
         if (extraTargets > 0) {
           const nearby = this.findNearestMonsters(target.x, target.y, this.cellSize * 1.8, extraTargets + 1).filter(
             (m) => m !== target,
           );
-          nearby.slice(0, extraTargets).forEach((m) => this.applyStatusEffect(m, effect, magnitude));
+          nearby.slice(0, extraTargets).forEach((m) => this.applyStatusEffect(m, effect, magnitude, poisonScale));
         }
       });
   }
 
-  private applyStatusEffect(target: Phaser.GameObjects.Image, effect: UnitEffect, magnitude = 1): void {
+  private applyStatusEffect(target: Phaser.GameObjects.Image, effect: UnitEffect, magnitude = 1, poisonScale = 1): void {
     let status = (target.getData('status') as StatusEffects) ?? {};
 
     switch (effect.type) {
@@ -636,7 +639,7 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       case 'poison':
-        status = applyPoison(status, (effect.value as number) * magnitude, effect.duration as number);
+        status = applyPoison(status, (effect.value as number) * poisonScale, effect.duration as number);
         break;
       case 'armorBreak':
         status = applyArmorBreak(status, (effect.value as number) * magnitude, effect.duration as number);
@@ -956,10 +959,6 @@ export class GameScene extends Phaser.Scene {
       );
       refs.text.setColor(active ? '#ffd98a' : '#8a8272');
     });
-  }
-
-  private totalMultiplier(unit: UnitDef): number {
-    return this.field.totalMultiplier(unit);
   }
 
   private confirmExit(): void {

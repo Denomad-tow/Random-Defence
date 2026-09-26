@@ -1,3 +1,5 @@
+import { MAX_SLOW_FACTOR } from './starBalance';
+
 export interface StatusEffects {
   slowFactor?: number;
   slowRemaining?: number;
@@ -63,7 +65,7 @@ export function tickStatusEffects(status: StatusEffects, dt: number): StatusTick
 }
 
 export function applySlow(status: StatusEffects, factor: number, duration: number): StatusEffects {
-  return { ...status, slowFactor: factor, slowRemaining: duration };
+  return { ...status, slowFactor: Math.min(factor, MAX_SLOW_FACTOR), slowRemaining: duration };
 }
 
 export function applyStun(status: StatusEffects, duration: number): StatusEffects {

@@ -85,7 +85,13 @@ export function attackTargetCount(unit: UnitDef): number {
 }
 
 // magnitude: 연구(직업 레벨) 등으로 커진 효과 배율. 감속·독·방어 감소의 수치에만 곱한다.
-function applyStatusEffect(target: FxMonster, effect: UnitEffect, magnitude: number, rand: () => number): void {
+function applyStatusEffect(
+  target: FxMonster,
+  effect: UnitEffect,
+  magnitude: number,
+  rand: () => number,
+  poisonScale: number,
+): void {
   switch (effect.type) {
     case 'slow':
       target.status = applySlow(target.status, num(effect.value, 0) * magnitude, num(effect.duration, 0));
@@ -96,7 +102,7 @@ function applyStatusEffect(target: FxMonster, effect: UnitEffect, magnitude: num
       }
       break;
     case 'poison':
-      target.status = applyPoison(target.status, num(effect.value, 0) * magnitude, num(effect.duration, 0));
+      target.status = applyPoison(target.status, num(effect.value, 0) * poisonScale, num(effect.duration, 0));
       break;
     case 'armorBreak':
       target.status = applyArmorBreak(target.status, num(effect.value, 0) * magnitude, num(effect.duration, 0));
@@ -146,17 +152,20 @@ export function resolveHit(
 
   damages.push({ monsterId: target.id, amount: taken(target, computeHitDamage(target, unit, attack, rand)) });
 
+  // 독은 시간에 걸친 "피해"라서, 공격력이 커지는 만큼(강화·레벨·연구·합성 별) 같이 커진다.
+  const poisonScale = unit.attack > 0 ? attack / unit.attack : 1;
+
   unit.effects
     .filter((effect) => STATUS_TYPES.includes(effect.type))
     .forEach((effect) => {
-      applyStatusEffect(target, effect, magnitude, rand);
+      applyStatusEffect(target, effect, magnitude, rand, poisonScale);
 
       const extra = num(effect.targets, 1) - 1;
       if (extra > 0) {
         nearestMonsters(monsters, target.x, target.y, geo.cellSize * EXTRA_TARGET_RANGE_CELLS, extra + 1)
           .filter((m) => m !== target)
           .slice(0, extra)
-          .forEach((m) => applyStatusEffect(m, effect, magnitude, rand));
+          .forEach((m) => applyStatusEffect(m, effect, magnitude, rand, poisonScale));
       }
     });
 

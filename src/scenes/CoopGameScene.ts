@@ -498,7 +498,7 @@ export class CoopGameScene extends Phaser.Scene {
     this.field.placedUnits.forEach((placed, index) => {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (cell) {
-        sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y, multiplier: this.field.totalMultiplier(placed.unit) });
+        sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y, multiplier: this.field.effectMultiplier(placed.unit, placed.star) });
       }
     });
     return sources;
@@ -531,7 +531,7 @@ export class CoopGameScene extends Phaser.Scene {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      const gold = goldGenInfo(placed.unit, this.field.totalMultiplier(placed.unit));
+      const gold = goldGenInfo(placed.unit, this.field.effectMultiplier(placed.unit, placed.star));
       if (gold) {
         placed.cooldown = gold.interval;
         this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
@@ -556,15 +556,15 @@ export class CoopGameScene extends Phaser.Scene {
       const bonus = (buffBonuses.get(index) ?? 0) + this.field.attackSpeedBonus();
       placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
 
-      targets.forEach((target) => this.performAttack(cell, placed.unit, target, isHost));
+      targets.forEach((target) => this.performAttack(cell, placed.unit, target, isHost, placed.star));
     });
   }
 
   // 발사체가 날아가 도착했을 때 효과를 적용한다. 방장은 몬스터가 아직 있을 때만,
   // 파티원은 방장에게 "이 유닛이 이 몬스터를 때렸다"고 알린다.
-  private performAttack(cell: CellPosition, unit: UnitDef, target: FxMonster, isHost: boolean): void {
-    const attack = this.field.attackOf(unit);
-    const magnitude = this.field.statusMagnitude(unit);
+  private performAttack(cell: CellPosition, unit: UnitDef, target: FxMonster, isHost: boolean, star: number): void {
+    const attack = this.field.attackOf(unit, star);
+    const magnitude = this.field.statusMagnitude(unit, star);
     const guestEntry = isHost ? undefined : this.guestMonsters.get(target.id);
     playSfx('attack', { role: unit.role });
 

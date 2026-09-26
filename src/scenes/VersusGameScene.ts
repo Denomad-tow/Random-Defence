@@ -286,7 +286,7 @@ export class VersusGameScene extends Phaser.Scene {
     this.field.placedUnits.forEach((placed, index) => {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (cell) {
-        sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y, multiplier: this.field.totalMultiplier(placed.unit) });
+        sources.push({ index, unit: placed.unit, x: cell.x, y: cell.y, multiplier: this.field.effectMultiplier(placed.unit, placed.star) });
       }
     });
     return sources;
@@ -311,7 +311,7 @@ export class VersusGameScene extends Phaser.Scene {
       const cell = this.boardCells.find((c) => cellIndex(c.row, c.col) === index);
       if (!cell) return;
 
-      const gold = goldGenInfo(placed.unit, this.field.totalMultiplier(placed.unit));
+      const gold = goldGenInfo(placed.unit, this.field.effectMultiplier(placed.unit, placed.star));
       if (gold) {
         placed.cooldown = gold.interval;
         this.economy = { ...this.economy, mana: this.economy.mana + gold.value };
@@ -332,12 +332,12 @@ export class VersusGameScene extends Phaser.Scene {
 
       const bonus = (buffBonuses.get(index) ?? 0) + this.field.attackSpeedBonus();
       placed.cooldown = 1 / (placed.unit.attackSpeed * (1 + bonus));
-      targets.forEach((target) => this.performAttack(cell, placed.unit, target));
+      targets.forEach((target) => this.performAttack(cell, placed.unit, target, placed.star));
     });
   }
 
   // 발사체가 날아가 도착했을 때(그 사이 몬스터가 죽었으면 취소) 효과를 적용한다.
-  private performAttack(cell: CellPosition, unit: UnitDef, target: MyMonster): void {
+  private performAttack(cell: CellPosition, unit: UnitDef, target: MyMonster, star: number): void {
     playSfx('attack', { role: unit.role });
     playProjectile(
       this,
@@ -358,10 +358,10 @@ export class VersusGameScene extends Phaser.Scene {
           resolveHit(
             target,
             unit,
-            this.field.attackOf(unit),
+            this.field.attackOf(unit, star),
             this.myMonsters,
             this.fxGeometry(),
-            this.field.statusMagnitude(unit),
+            this.field.statusMagnitude(unit, star),
           ),
         );
       },

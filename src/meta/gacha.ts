@@ -7,8 +7,14 @@ export interface BoxType {
   weights: Record<string, number>;
 }
 
-export const RARITY_ORDER = ['normal', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+// 등급 순서: N < R < SR < SSR < SSSR < UR < LR < GR < TR (내부 키는 저장 데이터 호환을 위해 옛 이름을 유지)
+export const RARITY_ORDER = ['normal', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'lr', 'gr', 'tr'];
 
+// 이 등급(UR) 이상이 나오면 천장 카운트가 0으로 돌아간다.
+const PITY_RESET_INDEX = RARITY_ORDER.indexOf('mythic');
+
+// 확률(가중치)은 합이 100이 되게 적는다. 값을 바꾸고 싶으면 여기만 고치면 된다.
+// 판 종료 보상으로 어떤 상자를 몇 개 받는지는 meta/rewards.ts에서 정한다.
 export const BOX_TYPES: BoxType[] = [
   {
     id: 'wood',
@@ -33,6 +39,24 @@ export const BOX_TYPES: BoxType[] = [
     name: '다이아 상자',
     cardCount: 7,
     weights: { normal: 10, uncommon: 20, rare: 28, epic: 24, legendary: 12, mythic: 6 },
+  },
+  {
+    id: 'platinum',
+    name: '플래티넘 상자',
+    cardCount: 8,
+    weights: { normal: 4, uncommon: 12, rare: 24, epic: 28, legendary: 20, mythic: 10, lr: 2 },
+  },
+  {
+    id: 'mithril',
+    name: '미스릴 상자',
+    cardCount: 10,
+    weights: { uncommon: 4, rare: 14, epic: 26, legendary: 28, mythic: 20, lr: 6, gr: 2 },
+  },
+  {
+    id: 'orichalcum',
+    name: '오리하르콘 상자',
+    cardCount: 12,
+    weights: { rare: 6, epic: 18, legendary: 30, mythic: 28, lr: 12, gr: 5, tr: 1 },
   },
 ];
 
@@ -95,7 +119,7 @@ export function openBox(box: BoxType): DrawnCard[] {
       rarity = rollRarity(box.weights);
     }
 
-    if (rarity === 'mythic') pity = 0;
+    if (RARITY_ORDER.indexOf(rarity) >= PITY_RESET_INDEX) pity = 0;
 
     const candidates = NORMAL_UNITS.filter((u) => u.rarity === rarity);
     const unit = candidates[Math.floor(Math.random() * candidates.length)];

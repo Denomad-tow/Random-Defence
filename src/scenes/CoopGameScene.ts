@@ -370,7 +370,7 @@ export class CoopGameScene extends Phaser.Scene {
 
     const reward = computeRunReward(stage);
     addGold(reward.gold);
-    addBox(reward.boxId);
+    addBox(reward.boxId, reward.boxCount);
     void flushSnapshot();
     // 협동전 순위: 참가자 각자가 자기 기록(도달 스테이지)을 남긴다.
     void recordCoopResult(this.members.length, stage, this.nickname);
@@ -407,7 +407,7 @@ export class CoopGameScene extends Phaser.Scene {
 
     const boxName = getBoxType(reward.boxId).name;
     this.add
-      .text(width / 2, height * 0.51, `보상: 골드 +${reward.gold} · ${boxName} +1`, {
+      .text(width / 2, height * 0.51, `보상: 골드 +${reward.gold} · ${boxName} +${reward.boxCount}`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(13)}px`,
         color: '#ffd98a',

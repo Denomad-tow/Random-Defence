@@ -617,7 +617,7 @@ export class VersusGameScene extends Phaser.Scene {
     playSfx(won ? 'newRecord' : 'defeat');
     const reward = computeRunReward(stage);
     addGold(reward.gold);
-    addBox(reward.boxId);
+    addBox(reward.boxId, reward.boxCount);
     void flushSnapshot();
 
     // 등수를 매길 수 있는 경우(승리했거나, 직접 탈락 처리된 경우)에만 순위표에
@@ -663,7 +663,7 @@ export class VersusGameScene extends Phaser.Scene {
 
     const boxName = getBoxType(reward.boxId).name;
     this.add
-      .text(width / 2, height * 0.46, `보상: 골드 +${reward.gold} · ${boxName} +1`, {
+      .text(width / 2, height * 0.46, `보상: 골드 +${reward.gold} · ${boxName} +${reward.boxCount}`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(13)}px`,
         color: '#ffd98a',

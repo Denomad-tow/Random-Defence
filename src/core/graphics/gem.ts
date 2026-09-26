@@ -11,13 +11,18 @@ export interface RarityPreset {
   rainbow?: boolean;
 }
 
+// 내부 키(normal/uncommon/...)는 저장된 데이터(컬렉션·덱)와 호환되도록 그대로 두고, 화면에 보이는 이름만 바꾼다.
+// N < R < SR < SSR < SSSR < UR < LR < GR < TR
 export const RARITIES: RarityPreset[] = [
-  { key: 'normal', label: '노말', c1: '#aab0bb', c2: '#5b606b', glow: 0.15, sparkleCount: 0 },
-  { key: 'uncommon', label: '고급', c1: '#4fd39a', c2: '#16623f', glow: 0.3, sparkleCount: 0 },
-  { key: 'rare', label: '희귀', c1: '#4f9dff', c2: '#173e8a', glow: 0.45, sparkleCount: 2 },
-  { key: 'epic', label: '영웅', c1: '#b67dff', c2: '#4a1f8f', glow: 0.6, sparkleCount: 4 },
-  { key: 'legendary', label: '전설', c1: '#ffc15a', c2: '#8c5a12', glow: 0.75, sparkleCount: 7 },
-  { key: 'mythic', label: '신화', c1: '#ff5d7a', c2: '#6a1dff', glow: 0.9, sparkleCount: 10, rainbow: true },
+  { key: 'normal', label: 'N', c1: '#aab0bb', c2: '#5b606b', glow: 0.15, sparkleCount: 0 },
+  { key: 'uncommon', label: 'R', c1: '#4fd39a', c2: '#16623f', glow: 0.3, sparkleCount: 0 },
+  { key: 'rare', label: 'SR', c1: '#4f9dff', c2: '#173e8a', glow: 0.45, sparkleCount: 2 },
+  { key: 'epic', label: 'SSR', c1: '#b67dff', c2: '#4a1f8f', glow: 0.6, sparkleCount: 4 },
+  { key: 'legendary', label: 'SSSR', c1: '#ffc15a', c2: '#8c5a12', glow: 0.75, sparkleCount: 7 },
+  { key: 'mythic', label: 'UR', c1: '#ff5d7a', c2: '#6a1dff', glow: 0.9, sparkleCount: 10, rainbow: true },
+  { key: 'lr', label: 'LR', c1: '#6ff7ff', c2: '#0a4d8c', glow: 1.0, sparkleCount: 12, rainbow: true },
+  { key: 'gr', label: 'GR', c1: '#ffe066', c2: '#b3122c', glow: 1.1, sparkleCount: 14, rainbow: true },
+  { key: 'tr', label: 'TR', c1: '#ffffff', c2: '#7a2bff', glow: 1.25, sparkleCount: 18, rainbow: true },
 ];
 
 export function getRarity(key: string): RarityPreset {

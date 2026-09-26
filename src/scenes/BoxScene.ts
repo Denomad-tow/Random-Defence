@@ -43,7 +43,7 @@ export class BoxScene extends Phaser.Scene {
     const gold = loadGold();
     const pity = loadPity();
     this.add
-      .text(width / 2, height * 0.1, `골드 ${gold} · 신화 천장까지 ${MYTHIC_PITY_LIMIT - pity}장`, {
+      .text(width / 2, height * 0.1, `골드 ${gold} · UR 천장까지 ${MYTHIC_PITY_LIMIT - pity}장`, {
         fontFamily: TITLE_FONT,
         fontSize: `${px(12)}px`,
         color: '#9a917d',
@@ -72,8 +72,8 @@ export class BoxScene extends Phaser.Scene {
   private layoutBoxList(): void {
     const { width, height } = this.scale;
     const boxes = loadBoxes();
-    const rowHeight = height * 0.14;
-    const startY = height * 0.22;
+    const startY = height * 0.19;
+    const rowHeight = Math.min(height * 0.14, (height * 0.97 - startY) / BOX_TYPES.length);
 
     BOX_TYPES.forEach((box, i) => {
       const y = startY + i * rowHeight;
@@ -86,23 +86,24 @@ export class BoxScene extends Phaser.Scene {
       rowBg.strokeRoundedRect(width * 0.08, y - rowHeight * 0.36, width * 0.84, rowHeight * 0.72, px(10));
 
       this.add
-        .text(width * 0.14, y, `${box.name}  ×${owned}`, {
+        .text(width * 0.14, y - rowHeight * 0.22, `${box.name}  ×${owned}`, {
           fontFamily: TITLE_FONT,
           fontSize: `${px(15)}px`,
           color: '#f6e6b4',
         })
         .setOrigin(0, 0.5);
 
-      const probText = Object.entries(box.weights)
+      const probText = `${box.cardCount}장 · ` + Object.entries(box.weights)
         .map(([r, w]) => `${getRarity(r).label} ${w}%`)
         .join(' · ');
       this.add
-        .text(width * 0.14, y + rowHeight * 0.24, probText, {
+        .text(width * 0.14, y - rowHeight * 0.02, probText, {
           fontFamily: TITLE_FONT,
           fontSize: `${px(9)}px`,
           color: '#8a8272',
+          wordWrap: { width: width * 0.6 },
         })
-        .setOrigin(0, 0.5);
+        .setOrigin(0, 0);
 
       const canOpen = owned > 0;
       const openText = this.add
@@ -129,7 +130,7 @@ export class BoxScene extends Phaser.Scene {
     const drawn = openBox(box);
     drawn.forEach((card) => addToCollection(card.unit.id));
     void flushSnapshot();
-    // 뽑힌 카드 중 가장 높은 등급에 맞는 소리를 낸다(전설·신화는 특별한 소리).
+    // 뽑힌 카드 중 가장 높은 등급에 맞는 소리를 낸다(SSSR 이상은 특별한 소리).
     playSfx('boxOpen', { rarity: Math.max(...drawn.map((card) => rarityIndex(card.unit.rarity))) });
 
     this.revealed = drawn;
@@ -139,7 +140,7 @@ export class BoxScene extends Phaser.Scene {
   private layoutReveal(cards: DrawnCard[]): void {
     const { width, height } = this.scale;
 
-    if (cards.some((c) => c.unit.rarity === 'mythic')) {
+    if (cards.some((c) => rarityIndex(c.unit.rarity) >= rarityIndex('mythic'))) {
       this.announceMythic(width, height);
     }
 
@@ -154,7 +155,7 @@ export class BoxScene extends Phaser.Scene {
 
     const cols = Math.min(5, cards.length);
     const rows = Math.ceil(cards.length / cols);
-    const cardSize = Math.min(width / (cols + 1), height * 0.4 / rows);
+    const cardSize = Math.min((width * 0.94) / (cols + (cols - 1) * 0.3), (height * 0.4) / rows);
     const gap = cardSize * 0.3;
     const gridWidth = cardSize * cols + gap * (cols - 1);
     const startX = width / 2 - gridWidth / 2 + cardSize / 2;
@@ -239,7 +240,7 @@ export class BoxScene extends Phaser.Scene {
         fontSize: `${px(10)}px`,
         color: '#c9c2af',
         align: 'center',
-        wordWrap: { width: size * 1.1 },
+        wordWrap: { width: size * 1.3 },
       })
       .setOrigin(0.5);
 

@@ -22,7 +22,7 @@ export type SfxName =
   | 'boxOpen';
 
 export interface SfxParams {
-  rarity?: number; // 0(노말) ~ 5(신화)
+  rarity?: number; // 0(N) ~ 8(TR)
   star?: number; // 2 ~ 7
   role?: string; // 유닛 역할 id (units.json의 role)
 }
@@ -169,12 +169,12 @@ function playScreen(): void {
 
 // 소환: 등급이 높을수록 음이 많아지고 잔향과 반짝임이 늘어난다.
 function playSummon(rarity: number): void {
-  const r = Math.max(0, Math.min(5, rarity));
+  const r = Math.max(0, Math.min(8, rarity));
   noise({ dur: 0.28, gain: 0.03 + r * 0.008, filter: 'highpass', freq: 5000, attack: 0.06 });
-  const notes = 2 + (r >= 2 ? 1 : 0) + (r >= 4 ? 1 : 0) + (r >= 5 ? 1 : 0);
+  const notes = 2 + (r >= 2 ? 1 : 0) + (r >= 4 ? 1 : 0) + (r >= 5 ? 1 : 0) + (r >= 6 ? 1 : 0) + (r >= 8 ? 1 : 0);
   for (let i = 0; i < notes; i += 1) {
     bell({
-      freq: PENTA[3 + i * 2] * 0.5 * (1 + r * 0.02),
+      freq: PENTA[Math.min(PENTA.length - 1, 3 + i * 2)] * 0.5 * (1 + r * 0.02),
       dur: 0.35 + r * 0.06,
       gain: 0.08 + r * 0.008,
       partials: 2 + (r >= 3 ? 1 : 0),
@@ -280,7 +280,7 @@ function playNewRecord(): void {
 
 // 상자 열기: 등급 6가지가 각각 다르고, 높을수록 뜸을 들이고 화려해진다. 전설·신화는 특별하다.
 function playBoxOpen(rarity: number): void {
-  const r = Math.max(0, Math.min(5, rarity));
+  const r = Math.max(0, Math.min(8, rarity));
 
   if (r === 0) {
     tone({ freq: 170, endFreq: 90, dur: 0.2, gain: 0.16 });
@@ -352,6 +352,25 @@ function playBoxOpen(rarity: number): void {
     bell({ freq: PENTA[Math.min(idx + 3, PENTA.length - 1)], dur: 3.4, gain: 0.08, partials: 4, metallic: i % 2 === 0, send: 0.85, delay: 2.1 + i * 0.03 }),
   );
   sparkle(18, 2.0, 0.03, 0.8, 2.2);
+
+  // LR·GR·TR: UR 연출 위에 더 높은 화음, 더 깊은 울림, 더 많은 반짝임을 겹쳐서 한 단계씩 더 웅장하게 한다.
+  if (r > 5) {
+    const extra = r - 5;
+    sparkle(10 * extra, 2.4, 0.03, 0.85, 2.0);
+    [0, 2, 4, 5].slice(0, 2 + extra).forEach((idx, i) =>
+      bell({ freq: PENTA[Math.min(PENTA.length - 1, idx + 8)], dur: 3.8, gain: 0.06, partials: 4, send: 0.9, delay: 2.1 + i * 0.05 + extra * 0.08 }),
+    );
+    tone({ freq: 40, endFreq: 28, dur: 1.6 + extra * 0.5, gain: 0.28, delay: 2.1 });
+    if (extra >= 2) {
+      [261.6, 392, 523.3, 784, 1046.5].forEach((freq, i) =>
+        tone({ freq, endFreq: freq * 1.5, dur: 2.4, gain: 0.04, attack: 2.0, send: 0.6, delay: 0.2 + i * 0.05 }),
+      );
+    }
+    if (extra >= 3) {
+      noise({ dur: 1.6, gain: 0.1, filter: 'highpass', freq: 3000, delay: 2.2, send: 0.8 });
+      sparkle(24, 2.6, 0.03, 0.9, 2.3);
+    }
+  }
 }
 
 // ----- 재생 진입점: 여기서 겹침 제한과 최소 간격을 지킨다 -----
@@ -443,7 +462,7 @@ export interface SfxEntry {
   play: () => void;
 }
 
-const RARITY_LABELS = ['노말', '고급', '희귀', '영웅', '전설', '신화'];
+const RARITY_LABELS = ['N', 'R', 'SR', 'SSR', 'SSSR', 'UR', 'LR', 'GR', 'TR'];
 const ROLE_LABELS: Array<[string, string]> = [
   ['single', '단일'],
   ['aoe', '광역'],

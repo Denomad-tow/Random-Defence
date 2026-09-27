@@ -64,27 +64,39 @@ export class AchievementsScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.drawClaimAll(width, height * 0.125, claimable);
-    this.drawTabs(width, height * 0.175, all);
+    this.drawTabs(width, height * 0.171, height * 0.213, all);
 
     const statuses = this.sortedForCategory(all);
+    const inCategory = all.filter((s) => s.def.category === this.category);
+    const categoryDone = inCategory.filter((s) => s.state === 'claimed').length;
+    this.add
+      .text(width / 2, height * 0.247, `${this.category} · 수령 ${categoryDone}/${inCategory.length}`, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(10.5)}px`,
+        color: '#8a8272',
+      })
+      .setOrigin(0.5);
     const totalPages = Math.max(1, Math.ceil(statuses.length / ROWS_PER_PAGE));
     this.page = Phaser.Math.Clamp(this.page, 0, totalPages - 1);
     const pageItems = statuses.slice(this.page * ROWS_PER_PAGE, (this.page + 1) * ROWS_PER_PAGE);
 
-    const top = height * 0.215;
-    const bottom = height * 0.9;
+    const top = height * 0.262;
+    const bottom = height * 0.915;
     const rowHeight = (bottom - top) / ROWS_PER_PAGE;
     pageItems.forEach((status, i) => this.drawRow(status, width, top + i * rowHeight + rowHeight / 2, rowHeight));
 
-    if (totalPages > 1) this.drawPagination(width, height * 0.945, totalPages);
+    if (totalPages > 1) this.drawPagination(width, height * 0.958, totalPages);
   }
 
   // 받을 수 있는 것 → 진행 중(목표가 낮은 순) → 이미 받은 것 순서
   private sortedForCategory(all: AchievementStatus[]): AchievementStatus[] {
     const rank = { claimable: 0, locked: 1, claimed: 2 } as const;
+    // 같은 상태끼리는 업적을 만든 순서(같은 줄기의 쉬운 것부터)를 그대로 유지한다.
     return all
-      .filter((s) => s.def.category === this.category)
-      .sort((a, b) => rank[a.state] - rank[b.state] || a.def.goal - b.def.goal);
+      .map((status, index) => ({ status, index }))
+      .filter((item) => item.status.def.category === this.category)
+      .sort((a, b) => rank[a.status.state] - rank[b.status.state] || a.index - b.index)
+      .map((item) => item.status);
   }
 
   private drawClaimAll(width: number, y: number, claimable: number): void {
@@ -116,17 +128,26 @@ export class AchievementsScene extends Phaser.Scene {
       });
   }
 
-  private drawTabs(width: number, y: number, all: AchievementStatus[]): void {
+  // 분류 탭: 9개를 위 줄 5개, 아래 줄 4개로 나눠 그린다.
+  private drawTabs(width: number, y1: number, y2: number, all: AchievementStatus[]): void {
+    const perRow = 5;
     const gap = width * 0.015;
-    const tabWidth = (width * 0.96 - gap * (ACHIEVEMENT_CATEGORIES.length - 1)) / ACHIEVEMENT_CATEGORIES.length;
+    const tabWidth = (width * 0.96 - gap * (perRow - 1)) / perRow;
+    const tabHeight = px(28);
+
     ACHIEVEMENT_CATEGORIES.forEach((category, i) => {
-      const x = width * 0.02 + tabWidth / 2 + i * (tabWidth + gap);
+      const row = Math.floor(i / perRow);
+      const col = i % perRow;
+      const countInRow = row === 0 ? perRow : ACHIEVEMENT_CATEGORIES.length - perRow;
+      const rowWidth = countInRow * tabWidth + (countInRow - 1) * gap;
+      const x = width / 2 - rowWidth / 2 + tabWidth / 2 + col * (tabWidth + gap);
+      const y = row === 0 ? y1 : y2;
       const active = category === this.category;
       const ready = all.some((s) => s.def.category === category && s.state === 'claimable');
 
-      this.add.image(x, y, roundedRectTexture(this, tabWidth, px(30), px(8), active ? 0x2a2416 : 0x151a28, active ? 1 : 0.85, active ? 0xd4b36a : 0x3a3a3a, px(1.5), `achtab${active ? 1 : 0}`));
+      this.add.image(x, y, roundedRectTexture(this, tabWidth, tabHeight, px(8), active ? 0x2a2416 : 0x151a28, active ? 1 : 0.85, active ? 0xd4b36a : 0x3a3a3a, px(1.5), `achtab${active ? 1 : 0}`));
       this.add
-        .text(x, y, category + (ready ? ' ●' : ''), {
+        .text(x, y, category + (ready ? '●' : ''), {
           fontFamily: TITLE_FONT,
           fontSize: `${px(12)}px`,
           color: ready ? '#ff9a6a' : active ? '#ffd98a' : '#8a8272',
@@ -134,7 +155,7 @@ export class AchievementsScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       this.add
-        .zone(x, y, tabWidth, px(30))
+        .zone(x, y, tabWidth, tabHeight)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
           if (this.category === category) return;
@@ -233,29 +254,30 @@ export class AchievementsScene extends Phaser.Scene {
   }
 
   private drawPagination(width: number, y: number, totalPages: number): void {
-    const gapX = width * 0.22;
     const arrow = (x: number, symbol: string, enabled: boolean, onClick: () => void): void => {
       this.add
-        .text(x, y, symbol, { fontFamily: TITLE_FONT, fontSize: `${px(20)}px`, color: enabled ? '#ffd98a' : '#4a4a4a', fontStyle: 'bold' })
+        .text(x, y, symbol, { fontFamily: TITLE_FONT, fontSize: `${px(17)}px`, color: enabled ? '#ffd98a' : '#4a4a4a', fontStyle: 'bold' })
         .setOrigin(0.5);
       this.add
-        .zone(x, y, px(48), px(40))
+        .zone(x, y, px(46), px(38))
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
           if (enabled) onClick();
         });
     };
-    arrow(width / 2 - gapX, '◀', this.page > 0, () => {
-      this.page -= 1;
+    const go = (page: number): void => {
+      this.page = Phaser.Math.Clamp(page, 0, totalPages - 1);
       this.layout();
-    });
+    };
+
+    // ◀◀ ◀ 현재/전체 ▶ ▶▶ (◀◀ ▶▶ 는 10쪽씩 건너뛴다)
+    arrow(width * 0.1, '◀◀', this.page > 0, () => go(this.page - 10));
+    arrow(width * 0.28, '◀', this.page > 0, () => go(this.page - 1));
     this.add
       .text(width / 2, y, `${this.page + 1} / ${totalPages}`, { fontFamily: TITLE_FONT, fontSize: `${px(13)}px`, color: '#f6e6b4' })
       .setOrigin(0.5);
-    arrow(width / 2 + gapX, '▶', this.page < totalPages - 1, () => {
-      this.page += 1;
-      this.layout();
-    });
+    arrow(width * 0.72, '▶', this.page < totalPages - 1, () => go(this.page + 1));
+    arrow(width * 0.9, '▶▶', this.page < totalPages - 1, () => go(this.page + 10));
   }
 
   private showToast(message: string): void {

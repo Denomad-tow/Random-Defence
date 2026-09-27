@@ -96,6 +96,8 @@ function injectStyle(): void {
 export interface InlineChatHandle {
   // 채팅창 윗부분의 화면 위치(CSS 픽셀). 그 아래 빈 공간을 모두 채운다.
   setTop(cssTop: number): void;
+  // 팝업이 화면을 덮는 동안 채팅창이 위에 겹쳐 보이지 않도록 잠깐 숨긴다.
+  setHidden(hidden: boolean): void;
   destroy(): void;
 }
 
@@ -175,12 +177,23 @@ export function mountInlineChat(): InlineChatHandle {
     input.value = '';
   });
 
+  let hidden = false;
+  let tooSmall = false;
+  const applyDisplay = (): void => {
+    root.style.display = hidden || tooSmall ? 'none' : 'flex';
+  };
+
   return {
     setTop(cssTop: number) {
       const available = window.innerHeight - cssTop;
       // 남는 공간이 너무 좁으면(아주 작은 화면) 숨긴다
-      root.style.display = available < 110 ? 'none' : 'flex';
+      tooSmall = available < 110;
       root.style.top = `${Math.round(cssTop)}px`;
+      applyDisplay();
+    },
+    setHidden(value: boolean) {
+      hidden = value;
+      applyDisplay();
     },
     destroy() {
       unsubscribeChat();

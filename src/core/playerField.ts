@@ -312,6 +312,8 @@ export class PlayerField {
     this.drawUnit(cell, placed, true);
     playSfx('summon', { rarity: rarityIndex(placed.unit.rarity) });
     addStat('summons');
+    addStat(`summon_${placed.unit.rarity}`);
+    if (!this.hasEmptyCell()) addStat('fullField');
     this.notifyChange();
   }
 
@@ -342,6 +344,8 @@ export class PlayerField {
     this.drawUnit(cell, this.pendingSummon, true);
     playSfx('summon', { rarity: rarityIndex(this.pendingSummon.unit.rarity) });
     addStat('summons');
+    addStat(`summon_${this.pendingSummon.unit.rarity}`);
+    if (!this.hasEmptyCell()) addStat('fullField');
 
     this.pendingSummon = undefined;
     this.pendingPreEconomy = undefined;

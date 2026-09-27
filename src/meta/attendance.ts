@@ -1,3 +1,4 @@
+import { addStat } from './stats';
 import { ATTENDANCE_REWARDS, ATTENDANCE_CYCLE_LENGTH, type AttendanceReward } from '../core/attendanceBalance';
 import { addBox } from './boxes';
 
@@ -57,5 +58,6 @@ export function claimAttendance(): { day: number; reward: AttendanceReward } | n
   const reward = ATTENDANCE_REWARDS[day - 1];
   addBox(reward.boxId, reward.count);
   saveState({ lastClaimedDay: day, lastClaimedDate: todayString() });
+  addStat('attendanceDays');
   return { day, reward };
 }

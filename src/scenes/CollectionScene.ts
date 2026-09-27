@@ -10,6 +10,10 @@ import { sortByRarityThenLevel } from '../meta/unitSort';
 import { px, capPx } from '../core/dpr';
 import { showInfoModal } from '../core/infoModal';
 import { unitLevelInfo } from '../core/levelInfo';
+import { applyBulkLevelUp, planBulkLevelUp } from '../meta/bulkLevelUp';
+import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
+import { addStat, flushStats } from '../meta/stats';
+import { flushSnapshot } from '../core/cloudSync';
 
 const TITLE_FONT = '"Noto Serif KR", serif';
 const ROWS_PER_PAGE = 5;
@@ -76,6 +80,13 @@ export class CollectionScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .setPadding(px(8), px(8), px(8), px(8))
       .on('pointerdown', () => this.scene.start('deck-select', { forceEdit: true }));
+
+    this.add
+      .text(width - px(12), height * 0.055, '⏫ 일괄 레벨업', { fontFamily: TITLE_FONT, fontSize: `${px(13)}px`, color: '#ffd98a', fontStyle: 'bold' })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(8), px(8), px(8), px(8))
+      .on('pointerdown', () => this.openBulkLevelUp());
 
     const owned = this.ownedUnits();
     const itemsPerPage = COLS * ROWS_PER_PAGE;
@@ -245,6 +256,52 @@ export class CollectionScene extends Phaser.Scene {
       .on('pointerdown', () => this.tryLevelUp(unit));
   }
 
+  // 일괄 레벨업: 골드·중복 카드로 올릴 수 있는 만큼 한꺼번에 올린다. 전체 / 덱 유닛만 중에서 고른다.
+  private openBulkLevelUp(): void {
+    const deckIds = loadDeckSlot(loadActiveSlot()) ?? [];
+    const all = planBulkLevelUp(deckIds, false);
+    const deckOnly = planBulkLevelUp(deckIds, true);
+
+    if (all.totalLevels === 0) {
+      this.showToast('레벨업할 수 있는 유닛이 없어요 (중복 카드나 골드가 부족해요)');
+      return;
+    }
+
+    const describe = (plan: typeof all): string =>
+      `${plan.changes.length}종 · 총 ${plan.totalLevels}레벨 · 골드 ${plan.totalGold.toLocaleString('ko-KR')} · 중복 카드 ${plan.totalDups}장`;
+
+    const buttons = [
+      { label: `전체 일괄 레벨업 (${all.totalLevels}레벨)`, primary: true, onClick: () => this.runBulk(all) },
+    ];
+    if (deckOnly.totalLevels > 0 && deckOnly.totalLevels !== all.totalLevels) {
+      buttons.push({ label: `덱 유닛만 (${deckOnly.totalLevels}레벨)`, primary: false, onClick: () => this.runBulk(deckOnly) });
+    }
+    buttons.push({ label: '취소', primary: false, onClick: () => undefined });
+
+    showInfoModal(this, {
+      title: '일괄 레벨업',
+      subtitle: '가진 골드와 중복 카드로 올릴 수 있는 만큼 올려요',
+      lines: [
+        `• 전체: ${describe(all)}`,
+        deckOnly.totalLevels > 0 ? `• 덱 유닛만: ${describe(deckOnly)}` : '• 덱 유닛만: 올릴 수 있는 유닛이 없어요',
+        '• 골드가 모자랄 때는 덱 유닛 → 높은 등급 순으로 올리고, 유닛마다 한 단계씩 돌아가며 올려요.',
+      ],
+      buttons,
+    });
+  }
+
+  private runBulk(plan: ReturnType<typeof planBulkLevelUp>): void {
+    if (!applyBulkLevelUp(plan)) {
+      this.showToast('레벨업에 실패했어요 (골드가 부족해요)');
+      return;
+    }
+    flushStats();
+    void flushSnapshot();
+    this.rebuildOwnedCounts();
+    this.layout();
+    this.showToast(`${plan.changes.length}종 · 총 ${plan.totalLevels}레벨 상승!`);
+  }
+
   private tryLevelUp(unit: UnitDef): void {
     const level = getUnitLevel(unit.id);
     if (level >= MAX_UNIT_LEVEL) return;
@@ -265,6 +322,7 @@ export class CollectionScene extends Phaser.Scene {
 
     consumeDuplicates(unit.id, cost.duplicates);
     setUnitLevel(unit.id, level + 1);
+    addStat('levelUps');
     this.rebuildOwnedCounts();
     this.layout();
     this.showToast(`${unit.name} Lv.${level + 1}!`);

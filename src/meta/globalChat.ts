@@ -1,5 +1,6 @@
 import { supabase } from '../core/supabaseClient';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { addStat } from './stats';
 
 // 로그인한 모든 사람이 앱을 켜는 동안 들어가 있는 공용 실시간 채널 하나로
 // (1) "지금 접속 중인 사람" 목록(프레즌스)과 (2) 덱 선택·개인전 화면 공용 채팅
@@ -80,6 +81,7 @@ export function sendGlobalChat(message: string): void {
   const msg: GlobalChatMessage = { nickname: myNickname, message: trimmed };
   // 보낸 사람 본인에게는 서버가 되돌려주지 않으므로 직접 기록에 넣는다.
   pushHistory(msg);
+  addStat('chatMessages');
   void channel.send({ type: 'broadcast', event: 'chat', payload: msg });
 }
 

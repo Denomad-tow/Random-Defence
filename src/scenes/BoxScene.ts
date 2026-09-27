@@ -131,6 +131,8 @@ export class BoxScene extends Phaser.Scene {
     const drawn = openBox(box);
     drawn.forEach((card) => addToCollection(card.unit.id));
     addStat('boxesOpened');
+    addStat(`open_${boxId}`);
+    drawn.forEach((card) => addStat(`draw_${card.rarity}`));
     flushStats();
     void flushSnapshot();
     // 뽑힌 카드 중 가장 높은 등급에 맞는 소리를 낸다(SSSR 이상은 특별한 소리).

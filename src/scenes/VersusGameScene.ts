@@ -22,7 +22,7 @@ import { loadDeckSlot, loadActiveSlot } from '../meta/deck';
 import { getCurrentNickname } from '../meta/auth';
 import { computeRunReward, type RunReward } from '../meta/rewards';
 import { recordVersusResult } from '../meta/versusRanking';
-import { recordKill, recordRun } from '../meta/stats';
+import { addStat, recordKill, recordRun } from '../meta/stats';
 import { addGold } from '../meta/gold';
 import { addBox } from '../meta/boxes';
 import { flushSnapshot } from '../core/cloudSync';
@@ -207,6 +207,7 @@ export class VersusGameScene extends Phaser.Scene {
     this.chat = mountChatOverlay((message) => {
       const nickname = this.nickname || '나';
       broadcastChat({ nickname, message });
+      addStat('chatMessages');
       this.chat?.addMessage(nickname, message, true);
     });
     setChatHandler((payload) => {

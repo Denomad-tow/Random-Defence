@@ -97,10 +97,9 @@ export function roleMultiplier(role: string): number {
   return 1 + getRoleLevel(role) * ROLE_BONUS_PER_LEVEL;
 }
 
-// 모든 연구 항목(일반 2개 + 역할별)의 레벨을 더한 값. 업적에서 쓴다.
-export function totalResearchLevels(): number {
+
+// 연구 상태 전체(일반 연구 + 역할 연구)를 한 번에 읽는다. 업적 진행도 계산에 쓴다.
+export function getResearchSnapshot(): { general: Partial<Record<GeneralResearchKey, number>>; role: Record<string, number> } {
   const state = loadState();
-  const general = Object.values(state.general).reduce((sum, v) => sum + (v ?? 0), 0);
-  const role = Object.values(state.role).reduce((sum, v) => sum + (v ?? 0), 0);
-  return general + role;
+  return { general: state.general, role: state.role };
 }

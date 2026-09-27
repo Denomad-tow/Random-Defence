@@ -12,6 +12,7 @@ import { signOut, getCurrentNickname } from '../meta/auth';
 import { flushSnapshot } from '../core/cloudSync';
 import { showInfoModal } from '../core/infoModal';
 import { claimableCount } from '../meta/achievements';
+import { recommendDecks, roleLabel } from '../core/deckRecommend';
 import { hasUnseenPatch, latestPatch, markPatchSeen, patchToModal } from '../meta/patchNotes';
 import { showDeleteAccountOverlay } from '../core/deleteAccountOverlay';
 import { showBugReportOverlay } from '../core/bugReportOverlay';
@@ -326,6 +327,20 @@ export class DeckSelectScene extends Phaser.Scene {
     const resetHeight = height * 0.045;
     const resetX = width - px(12) - resetWidth / 2;
 
+    // 덱 추천 / 자동 선택 (선택 수 글자 왼쪽)
+    const smallButton = (x: number, label: string, color: string, onClick: () => void): void => {
+      const w = width * 0.17;
+      const bg = this.add.graphics();
+      bg.fillStyle(0x151a28, 0.95);
+      bg.fillRoundedRect(x - w / 2, countY - resetHeight / 2, w, resetHeight, px(8));
+      bg.lineStyle(px(1.5), Phaser.Display.Color.HexStringToColor(color).color, 0.8);
+      bg.strokeRoundedRect(x - w / 2, countY - resetHeight / 2, w, resetHeight, px(8));
+      this.add.text(x, countY, label, { fontFamily: TITLE_FONT, fontSize: `${px(12)}px`, color, fontStyle: 'bold' }).setOrigin(0.5);
+      this.add.zone(x, countY, w, resetHeight).setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+    };
+    smallButton(px(12) + width * 0.085, '⭐ 추천', '#ffd98a', () => this.openRecommend());
+    smallButton(px(12) + width * 0.085 + width * 0.185, '⚡ 자동', '#9be89b', () => this.autoSelect());
+
     const resetBg = this.add.graphics();
     resetBg.fillStyle(0x2a1616, 0.9);
     resetBg.fillRoundedRect(resetX - resetWidth / 2, countY - resetHeight / 2, resetWidth, resetHeight, px(8));
@@ -586,6 +601,52 @@ export class DeckSelectScene extends Phaser.Scene {
     this.refreshSelectionUI();
   }
 
+  // 추천 조합 목록을 보여주고, 고르면 그 5종이 덱으로 선택된다.
+  private openRecommend(): void {
+    const recs = recommendDecks(this.ownedUnits());
+    if (recs.length === 0) {
+      this.showToast('추천할 유닛이 아직 없어요');
+      return;
+    }
+
+    const circled = ['①', '②', '③', '④', '⑤', '⑥'];
+    this.inlineChat?.setHidden(true);
+    showInfoModal(this, {
+      onClose: () => this.inlineChat?.setHidden(false),
+      title: '추천 덱 조합',
+      subtitle: '가진 유닛 중 잘 어울리는 5종을 골라 드려요',
+      lines: recs.map(
+        (rec, i) =>
+          `${circled[i] ?? i + 1} ${rec.title} — ${rec.desc}\n   ${rec.units.map((u) => `${u.name}(${roleLabel(u)})`).join(', ')}`,
+      ),
+      buttons: [
+        ...recs.map((rec, i) => ({
+          label: `${circled[i] ?? i + 1} ${rec.title} 선택`,
+          primary: i === 0,
+          onClick: () => this.applyDeck(rec.units.map((u) => u.id), `${rec.title} 조합을 선택했어요`),
+        })),
+        { label: '닫기', primary: false, onClick: () => undefined },
+      ],
+    });
+  }
+
+  // 자동 선택: 가장 무난한 "균형형" 추천을 바로 적용한다.
+  private autoSelect(): void {
+    const recs = recommendDecks(this.ownedUnits());
+    if (recs.length === 0) {
+      this.showToast('선택할 유닛이 아직 없어요');
+      return;
+    }
+    this.applyDeck(recs[0].units.map((u) => u.id), `자동 선택: ${recs[0].title}`);
+  }
+
+  private applyDeck(ids: string[], message: string): void {
+    this.selected = new Set(ids.slice(0, DECK_SIZE));
+    this.cardRefs.forEach((_, id) => this.updateCardVisual(id));
+    this.refreshSelectionUI();
+    this.showToast(message);
+  }
+
   private resetSelection(): void {
     this.selected.clear();
     this.cardRefs.forEach((_, id) => this.updateCardVisual(id));
@@ -795,7 +856,8 @@ export class DeckSelectScene extends Phaser.Scene {
     const latest = latestPatch();
     if (!latest) return;
     markPatchSeen();
-    showInfoModal(this, patchToModal(latest));
+    this.inlineChat?.setHidden(true);
+    showInfoModal(this, { ...patchToModal(latest), onClose: () => this.inlineChat?.setHidden(false) });
   }
 
   private showToast(message: string): void {

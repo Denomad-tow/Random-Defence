@@ -2,34 +2,14 @@
 // 몬스터를 잡을 때마다 저장소에 쓰면 무거우니, 메모리에 모아뒀다가 몇 초에 한 번(또는 판이 끝날 때) 저장한다.
 const KEY = 'rd_stats';
 
-export type StatKey =
-  | 'bestStage' // 모든 모드를 통틀어 가장 멀리 간 스테이지
-  | 'kills' // 처치한 몬스터 수(전체)
-  | 'bossKills' // 처치한 보스 수
-  | 'runs' // 끝까지 플레이한 판 수(전체)
-  | 'coopRuns' // 협동전 판 수
-  | 'versusWins' // 경쟁전 우승 횟수
-  | 'summons' // 유닛 소환 횟수
-  | 'merges' // 합성 횟수
-  | 'maxStar' // 만들어 본 가장 높은 별
-  | 'enhances' // 인게임 강화 횟수
-  | 'boxesOpened'; // 연 상자 수
+// 기록 이름. 자주 쓰는 것:
+//  bestStage(모든 모드 최고 스테이지) kills bossKills runs coopRuns versusWins summons merges maxStar enhances boxesOpened
+//  levelUps(컬렉션 레벨업 횟수) soloBest coopBest versusBest fullField(필드를 가득 채운 횟수)
+//  attendanceDays chatMessages  summon_<등급키> draw_<등급키> open_<상자id>
+export type StatKey = string;
+export type Stats = Record<string, number>;
 
-export type Stats = Record<StatKey, number>;
-
-const EMPTY: Stats = {
-  bestStage: 0,
-  kills: 0,
-  bossKills: 0,
-  runs: 0,
-  coopRuns: 0,
-  versusWins: 0,
-  summons: 0,
-  merges: 0,
-  maxStar: 1,
-  enhances: 0,
-  boxesOpened: 0,
-};
+const EMPTY: Stats = { maxStar: 1 };
 
 let cache: Stats | null = null;
 let dirty = false;
@@ -39,12 +19,12 @@ function load(): Stats {
   if (cache) return cache;
   try {
     const raw = localStorage.getItem(KEY);
-    const parsed = raw ? (JSON.parse(raw) as Partial<Stats>) : {};
+    const parsed = raw ? (JSON.parse(raw) as Stats) : {};
     cache = { ...EMPTY, ...parsed };
   } catch {
     cache = { ...EMPTY };
   }
-  return cache;
+  return cache as Stats;
 }
 
 export function getStats(): Stats {
@@ -52,7 +32,7 @@ export function getStats(): Stats {
 }
 
 export function getStat(key: StatKey): number {
-  return load()[key];
+  return load()[key] ?? 0;
 }
 
 // 지금까지 모은 값을 저장소에 쓴다. (서버 저장 직전과 판이 끝날 때도 부른다)
@@ -78,14 +58,14 @@ function markDirty(): void {
 
 export function addStat(key: StatKey, amount = 1): void {
   const stats = load();
-  stats[key] += amount;
+  stats[key] = (stats[key] ?? 0) + amount;
   markDirty();
 }
 
 // 최고 기록 형태(가장 멀리 간 스테이지, 가장 높은 별)는 더 클 때만 바꾼다.
 export function maxStat(key: StatKey, value: number): void {
   const stats = load();
-  if (value > stats[key]) {
+  if (value > (stats[key] ?? 0)) {
     stats[key] = value;
     markDirty();
   }
@@ -101,6 +81,7 @@ export function recordKill(kind: string): void {
 export function recordRun(stage: number, mode: 'solo' | 'coop' | 'versus', won = false): void {
   addStat('runs');
   maxStat('bestStage', stage);
+  maxStat(mode === 'solo' ? 'soloBest' : mode === 'coop' ? 'coopBest' : 'versusBest', stage);
   if (mode === 'coop') addStat('coopRuns');
   if (mode === 'versus' && won) addStat('versusWins');
   flushStats();

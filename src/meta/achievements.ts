@@ -333,7 +333,14 @@ function build(): AchievementDef[] {
   return list;
 }
 
-export const ACHIEVEMENTS: AchievementDef[] = build();
+// 업적 골드 보상 배율. 값을 줄이면 골드 보상이 전체적으로 줄어든다(상자 보상은 그대로).
+// 0.2 = 처음 계산한 값의 20%. (전부 달성했을 때 총합이 약 470만 → 약 95만)
+export const ACHIEVEMENT_GOLD_SCALE = 0.2;
+
+export const ACHIEVEMENTS: AchievementDef[] = build().map((def) => ({
+  ...def,
+  reward: { ...def.reward, gold: Math.max(10, Math.round((def.reward.gold * ACHIEVEMENT_GOLD_SCALE) / 10) * 10) },
+}));
 
 // ----- 받은 업적 기록 -----
 

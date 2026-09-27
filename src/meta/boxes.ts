@@ -35,3 +35,13 @@ export function takeBox(boxId: string): boolean {
   saveBoxes(counts);
   return true;
 }
+
+// 상자를 최대 amount개까지 한 번에 꺼낸다(저장은 한 번). 실제로 꺼낸 개수를 돌려준다.
+export function takeBoxes(boxId: string, amount: number): number {
+  const counts = loadBoxes();
+  const taken = Math.min(amount, counts[boxId] ?? 0);
+  if (taken <= 0) return 0;
+  counts[boxId] = (counts[boxId] ?? 0) - taken;
+  saveBoxes(counts);
+  return taken;
+}

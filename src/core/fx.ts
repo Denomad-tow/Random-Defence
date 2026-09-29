@@ -12,11 +12,13 @@ import { px } from './dpr';
 
 const DOT_KEY = 'fx-dot';
 const RING_KEY = 'fx-ring';
+const GLOW_KEY = 'fx-glow';
 const TEXTURE_SIZE = 64;
+const GLOW_TEXTURE_SIZE = 128;
 
 const pools = new WeakMap<Phaser.Scene, Phaser.GameObjects.Image[]>();
 
-// 흰색 원 / 흰색 링 텍스처를 한 번만 만든다. 나중에 tint(색 입히기)로 원하는 색을 낸다.
+// 흰색 원 / 흰색 링 / 부드러운 빛무리 텍스처를 한 번만 만든다. 나중에 tint(색 입히기)로 원하는 색을 낸다.
 export function ensureFxTextures(scene: Phaser.Scene): void {
   if (!scene.textures.exists(DOT_KEY)) {
     const g = scene.make.graphics({ x: 0, y: 0 }, false);
@@ -31,6 +33,21 @@ export function ensureFxTextures(scene: Phaser.Scene): void {
     g.strokeCircle(TEXTURE_SIZE / 2, TEXTURE_SIZE / 2, TEXTURE_SIZE / 2 - 4);
     g.generateTexture(RING_KEY, TEXTURE_SIZE, TEXTURE_SIZE);
     g.destroy();
+  }
+  if (!scene.textures.exists(GLOW_KEY)) {
+    // 가운데는 밝고 가장자리로 갈수록 옅어지는 원. 합성 별 표시처럼 "빛나는 기운"을 표현할 때 쓴다.
+    const canvasTexture = scene.textures.createCanvas(GLOW_KEY, GLOW_TEXTURE_SIZE, GLOW_TEXTURE_SIZE);
+    if (canvasTexture) {
+      const ctx = canvasTexture.getContext();
+      const r = GLOW_TEXTURE_SIZE / 2;
+      const gradient = ctx.createRadialGradient(r, r, 0, r, r, r);
+      gradient.addColorStop(0, 'rgba(255,255,255,1)');
+      gradient.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, GLOW_TEXTURE_SIZE, GLOW_TEXTURE_SIZE);
+      canvasTexture.refresh();
+    }
   }
 }
 
@@ -50,7 +67,14 @@ function acquire(scene: Phaser.Scene, key: string): Phaser.GameObjects.Image {
   }
   if (!image) image = scene.add.image(0, 0, key);
 
-  return image.setTexture(key).setActive(true).setVisible(true).setAlpha(1).setScale(1).setDepth(0);
+  return image
+    .setTexture(key)
+    .setActive(true)
+    .setVisible(true)
+    .setAlpha(1)
+    .setScale(1)
+    .setDepth(0)
+    .setBlendMode(Phaser.BlendModes.NORMAL);
 }
 
 export function releaseFx(image: Phaser.GameObjects.Image): void {
@@ -72,6 +96,18 @@ export function fxDot(scene: Phaser.Scene, x: number, y: number, radius: number,
 export function fxRing(scene: Phaser.Scene, x: number, y: number, radius: number, color: number, alpha = 1): Phaser.GameObjects.Image {
   const image = acquire(scene, RING_KEY);
   return image.setPosition(x, y).setDisplaySize(radius * 2, radius * 2).setTint(color).setAlpha(alpha);
+}
+
+// 가운데가 밝고 가장자리가 옅어지는 빛무리(가산 혼합이라 어두운 배경 위에서 색이 또렷하게 도드라진다).
+// 합성으로 별이 높아진 강한 유닛을 표시하는 등, "은은한 기운"을 표현할 때 fxDot/fxRing보다 잘 보인다.
+export function fxGlow(scene: Phaser.Scene, x: number, y: number, radius: number, color: number, alpha = 1): Phaser.GameObjects.Image {
+  const image = acquire(scene, GLOW_KEY);
+  return image
+    .setPosition(x, y)
+    .setDisplaySize(radius * 2, radius * 2)
+    .setTint(color)
+    .setAlpha(alpha)
+    .setBlendMode(Phaser.BlendModes.ADD);
 }
 
 // 원 하나를 움직이거나 사라지게 한 뒤 풀에 돌려준다.

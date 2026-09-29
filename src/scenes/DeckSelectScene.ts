@@ -746,8 +746,16 @@ export class DeckSelectScene extends Phaser.Scene {
 
       const claimed = day < today || (day === today && !canClaim);
       const isToday = day === today && canClaim;
-      const boxColor =
-        reward.boxId === 'diamond' ? '#7ef0ff' : reward.boxId === 'gold' ? '#ffd98a' : reward.boxId === 'silver' ? '#c9d6e0' : '#c9a878';
+      const BOX_COLORS: Record<string, string> = {
+        wood: '#c9a878',
+        silver: '#c9d6e0',
+        gold: '#ffd98a',
+        diamond: '#7ef0ff',
+        platinum: '#6ff7ff',
+        mithril: '#ffe066',
+        orichalcum: '#ffffff',
+      };
+      const boxColor = BOX_COLORS[reward.boxId] ?? '#c9a878';
 
       const cellBg = this.add.graphics().setDepth(602);
       cellBg.fillStyle(isToday ? 0x2a2416 : 0x1c2233, isToday ? 1 : 0.85);
@@ -764,10 +772,11 @@ export class DeckSelectScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(603);
 
+      const boxName = getBoxType(reward.boxId).name.replace(' 상자', '');
       this.add
-        .text(x, y + cellSize * 0.02, getBoxType(reward.boxId).name.replace(' 상자', ''), {
+        .text(x, y + cellSize * 0.02, boxName, {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(12)}px`,
+          fontSize: `${px(boxName.length >= 5 ? 9 : boxName.length >= 4 ? 10 : 12)}px`,
           color: claimed ? '#6a6458' : boxColor,
           fontStyle: 'bold',
         })

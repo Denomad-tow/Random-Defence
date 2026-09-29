@@ -11,7 +11,8 @@ import { getUnitLevel, levelStatMultiplier } from '../meta/levels';
 import { px } from './dpr';
 import { starDamageMultiplier, starEffectMultiplier, starSpeedMultiplier } from './starBalance';
 import { computeBuffBonuses } from './effectsEngine';
-import { roundedRectTexture } from './fx';
+import { fxGlow, releaseFx, roundedRectTexture } from './fx';
+import { starLabel, starTier } from './starVisual';
 import { detailLines } from './unitDescription';
 import { addStat, maxStat } from '../meta/stats';
 import { playSfx, rarityIndex } from './sfx';
@@ -25,6 +26,7 @@ export interface PlacedUnitState {
   cooldown: number;
   sprite?: Phaser.GameObjects.Image;
   label?: Phaser.GameObjects.Text;
+  aura?: Phaser.GameObjects.Image; // 별 4개 이상일 때 유닛 뒤에 표시하는 색 오라
 }
 
 interface ActionButton {
@@ -222,6 +224,7 @@ export class PlayerField {
 
     placed.sprite?.destroy();
     placed.label?.destroy();
+    if (placed.aura) releaseFx(placed.aura);
 
     const size = Math.round(cellSize * 0.86);
     const key = `unit-${placed.unit.rarity}-${placed.unit.role}-${size}`;
@@ -253,10 +256,34 @@ export class PlayerField {
     }
 
     const level = this.enhanceLevels.get(placed.unit.id) ?? 0;
-    const labelText = level > 0 ? `${'★'.repeat(placed.star)} · 강화${level}` : '★'.repeat(placed.star);
+    const tier = starTier(placed.star);
+    const labelText = level > 0 ? `${starLabel(placed.star)} · 강화${level}` : starLabel(placed.star);
     placed.label = scene.add
-      .text(cell.x, cell.y + cellSize * 0.4, labelText, { fontFamily: TITLE_FONT, fontSize: `${px(11)}px`, color: '#f3dc9a' })
-      .setOrigin(0.5);
+      .text(cell.x, cell.y + cellSize * 0.4, labelText, {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(11 + tier.fontStep)}px`,
+        color: tier.labelColor,
+        fontStyle: placed.star >= 4 ? 'bold' : 'normal',
+      })
+      .setOrigin(0.5)
+      .setStroke('#1a1200', px(placed.star >= 4 ? 3 : 2));
+    if (tier.glow) placed.label.setShadow(0, 0, tier.labelColor, px(6), false, true);
+
+    // 별 4개부터 유닛 뒤에 색 오라를 둬서 한눈에 "합성을 많이 한 강한 유닛"임을 알아보게 한다.
+    // (도형을 매 프레임 다시 그리면 몬스터가 많을 때 무거워지므로, 미리 만든 이미지를 재사용한다)
+    if (placed.star >= 4) {
+      // 유닛 그림 자체에 이미 등급 색 광택이 칠해져 있어서, 딱 맞는 크기의 테두리/원은 거의 안 보인다.
+      // 유닛보다 눈에 띄게 큰 가산 혼합 빛무리를 깔아야 "이 유닛은 많이 합성했다"는 게 한눈에 들어온다.
+      const aura = fxGlow(scene, cell.x, cell.y, cellSize * 0.95, tier.ringColor, 0.9);
+      scene.children.moveBelow(aura, sprite);
+      if (tier.pulse) {
+        scene.tweens.add({ targets: aura, scale: { from: 1, to: 1.15 }, alpha: { from: 0.9, to: 0.55 }, duration: 750, yoyo: true, repeat: -1 });
+      }
+      placed.aura = aura;
+    } else {
+      placed.aura = undefined;
+    }
+
     placed.sprite = sprite;
 
     this.refreshRangeOverlay();
@@ -443,8 +470,10 @@ export class PlayerField {
   ): void {
     sourcePlaced.sprite?.destroy();
     sourcePlaced.label?.destroy();
+    if (sourcePlaced.aura) releaseFx(sourcePlaced.aura);
     targetPlaced.sprite?.destroy();
     targetPlaced.label?.destroy();
+    if (targetPlaced.aura) releaseFx(targetPlaced.aura);
 
     this.placedUnits.delete(sourceIndex);
     this.placedUnits.delete(targetIndex);
@@ -520,8 +549,10 @@ export class PlayerField {
       const target = this.placedUnits.get(targetIndex)!;
       source.sprite?.destroy();
       source.label?.destroy();
+      if (source.aura) releaseFx(source.aura);
       target.sprite?.destroy();
       target.label?.destroy();
+      if (target.aura) releaseFx(target.aura);
 
       const result = this.createMergeResult(source);
       if (this.selected === source || this.selected === target) this.selected = result;
@@ -713,6 +744,7 @@ export class PlayerField {
 
     placed.sprite?.destroy();
     placed.label?.destroy();
+    if (placed.aura) releaseFx(placed.aura);
     this.placedUnits.delete(index);
     if (this.selected === placed) this.selected = undefined;
 

@@ -6,7 +6,7 @@ const ATTENDANCE_KEY = 'rd_attendance';
 
 // 보상표를 바꿀 때마다 이 숫자를 1 올린다. 저장된 진행도의 버전이 다르면(예전 보상표 기준으로
 // 쌓인 진행이면) 진행을 초기화해서, 모든 사람이 새 보상표로 오늘부터 다시 1일차를 시작하게 한다.
-const ATTENDANCE_VERSION = 2;
+const ATTENDANCE_VERSION = 3;
 
 interface AttendanceState {
   lastClaimedDay: number; // 0 = 아직 한 번도 안 받음, 1~7 = 마지막으로 받은 일차

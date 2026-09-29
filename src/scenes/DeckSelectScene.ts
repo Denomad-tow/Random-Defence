@@ -760,7 +760,7 @@ export class DeckSelectScene extends Phaser.Scene {
       const isAssorted = reward.length > 1;
       const boxColor = isAssorted ? '#ffe9b0' : (BOX_COLORS[reward[0].boxId] ?? '#c9a878');
       const boxName = isAssorted ? '모둠 상자' : getBoxType(reward[0].boxId).name.replace(' 상자', '');
-      const countLabel = isAssorted ? '각 1개' : `x${reward[0].count}`;
+      const countLabel = isAssorted ? `각 ${reward[0].count}개` : `x${reward[0].count}`;
 
       const cellBg = this.add.graphics().setDepth(602);
       cellBg.fillStyle(isToday ? 0x2a2416 : 0x1c2233, isToday ? 1 : 0.85);

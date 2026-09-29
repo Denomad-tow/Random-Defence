@@ -234,6 +234,7 @@ export class VersusGameScene extends Phaser.Scene {
     const dt = (delta / 1000) * this.gameSpeed;
     this.updateMonsters(dt);
     this.updateCombat(dt);
+    this.field.tickAutoEnhance();
   }
 
   private updateMonsters(dt: number): void {
@@ -913,6 +914,17 @@ export class VersusGameScene extends Phaser.Scene {
         color: '#9a917d',
       })
       .setOrigin(1, 0.5);
+
+    this.add
+      .text(width - px(12), headerHeight * 2.0, '⚙자동강화', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(12)}px`,
+        color: '#9fe6a0',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.field.openAutoEnhancePanel());
 
     // 스테이지·몬스터·마나 정보는 "나가기"/방 코드와 같은 줄에 두면 휴대폰
     // 좁은 화면에서 글씨가 겹치므로, 그 아래 전용 줄에 따로 표시한다.

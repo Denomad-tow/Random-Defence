@@ -70,6 +70,10 @@ export class PlayerField {
   enhanceLevels = new Map<string, number>();
   pendingSummon?: PlacedUnitState;
   removeMode = false;
+  autoEnhanceOn = false;
+  // 덱 유닛 id를 우선순위 순서로 담아둔다(1번이 가장 먼저 강화됨). 빈 값이면 덱 순서를 그대로 쓴다.
+  private autoEnhanceOrder: string[] = [];
+  private autoEnhancePanel?: Phaser.GameObjects.Container;
   private selected?: PlacedUnitState;
   private actionButtons: ActionButton[] = [];
   private buffMarks: Phaser.GameObjects.Text[] = [];
@@ -159,6 +163,7 @@ export class PlayerField {
     this.buffMarksKey = '';
     this.infoPanel = undefined;
     this.infoKey = '';
+    this.autoEnhancePanel = undefined;
     this.rangeGraphics = this.host.scene.add.graphics();
 
     const { cells } = this.host.geometry();
@@ -689,6 +694,194 @@ export class PlayerField {
     });
 
     this.host.floatText(cell.x, cell.y, `강화 Lv.${level + 1}!`, '#ffd98a');
+  }
+
+  // ----- 자동강화 (덱 유닛 우선순위대로 마나가 모이는 대로 자동으로 강화) -----
+
+  // 저장된 우선순위에서 지금 덱에 없는 유닛은 빼고, 덱에는 있는데 순서가 없는 유닛은 뒤에 붙인다.
+  // 그래서 덱을 바꿔도 항상 지금 덱의 유닛 전부가 순서에 포함된다.
+  autoEnhancePriority(): string[] {
+    const deckIds = this.host.deckPool().map((u) => u.id);
+    const known = this.autoEnhanceOrder.filter((id) => deckIds.includes(id));
+    const missing = deckIds.filter((id) => !known.includes(id));
+    return [...known, ...missing];
+  }
+
+  setAutoEnhancePriority(order: string[]): void {
+    this.autoEnhanceOrder = order;
+  }
+
+  toggleAutoEnhance(): void {
+    this.autoEnhanceOn = !this.autoEnhanceOn;
+  }
+
+  // 매 프레임 호출: 켜져 있으면 우선순위 1번부터 확인해서, 이미 최대 강화면 건너뛰고
+  // 최대가 아닌 첫 유닛을 만나면 그 유닛만 강화를 시도한다(그 유닛 비용을 못 낼 땐
+  // 더 싼 아래 순위 유닛으로 넘어가지 않고 그냥 멈춘다 — 우선순위를 그대로 지키기 위함).
+  tickAutoEnhance(): void {
+    if (!this.autoEnhanceOn) return;
+
+    for (const unitId of this.autoEnhancePriority()) {
+      const level = this.enhanceLevels.get(unitId) ?? 0;
+      if (!canEnhance(level)) continue;
+
+      const cost = enhanceCost(level);
+      if (this.host.economy().mana < cost) return;
+
+      this.performAutoEnhance(unitId, level, cost);
+      return;
+    }
+  }
+
+  private performAutoEnhance(unitId: string, level: number, cost: number): void {
+    this.host.setEconomy({ ...this.host.economy(), mana: this.host.economy().mana - cost });
+    this.enhanceLevels.set(unitId, level + 1);
+    addStat('enhances');
+    this.notifyChange();
+
+    const { cells } = this.host.geometry();
+    let anyCell: CellPosition | undefined;
+    this.placedUnits.forEach((entry, entryIndex) => {
+      if (entry.unit.id !== unitId) return;
+      const entryCell = cells.find((c) => cellIndex(c.row, c.col) === entryIndex);
+      if (entryCell) {
+        this.drawUnit(entryCell, entry);
+        anyCell = entryCell;
+      }
+    });
+    if (anyCell) this.host.floatText(anyCell.x, anyCell.y, `자동강화 Lv.${level + 1}!`, '#9fe6a0');
+  }
+
+  // 자동강화 우선순위를 정하고 켜고 끄는 팝업. 세 전투 화면(개인전·협동전·경쟁전)이 공통으로 쓴다.
+  openAutoEnhancePanel(): void {
+    this.autoEnhancePanel?.destroy(true);
+    const scene = this.host.scene;
+    const { width, height } = scene.scale;
+
+    const order = this.autoEnhancePriority();
+    const rowH = px(32);
+    const rowGap = px(6);
+    const panelWidth = Math.min(width * 0.86, px(300));
+    const panelHeight = Math.min(height * 0.8, px(96) + order.length * (rowH + rowGap));
+    const panelX = width / 2;
+    const panelY = height / 2;
+    const top = panelY - panelHeight / 2;
+
+    const container = scene.add.container(0, 0).setDepth(2000);
+    this.autoEnhancePanel = container;
+
+    const dim = scene.add
+      .rectangle(width / 2, height / 2, width, height, 0x000000, 0.72)
+      .setInteractive()
+      .on('pointerdown', () => this.closeAutoEnhancePanel());
+    container.add(dim);
+
+    const bg = scene.add.image(
+      panelX,
+      panelY,
+      roundedRectTexture(scene, panelWidth, panelHeight, px(12), 0x141826, 0.97, 0xffd98a, px(2), 'auto-enhance-panel'),
+    );
+    container.add(bg);
+
+    container.add(
+      scene.add
+        .text(panelX, top + px(20), '자동강화 우선순위', {
+          fontFamily: TITLE_FONT,
+          fontSize: `${px(15)}px`,
+          color: '#ffd98a',
+          fontStyle: 'bold',
+        })
+        .setOrigin(0.5),
+    );
+
+    const toggleText = scene.add
+      .text(panelX, top + px(44), '', { fontFamily: TITLE_FONT, fontSize: `${px(12.5)}px`, color: '#9fd8ff' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    const refreshToggle = () => {
+      toggleText.setText(this.autoEnhanceOn ? '자동강화 켜짐 (누르면 끄기)' : '자동강화 꺼짐 (누르면 켜기)');
+      toggleText.setColor(this.autoEnhanceOn ? '#9fe6a0' : '#9a917d');
+    };
+    refreshToggle();
+    toggleText.on('pointerdown', () => {
+      this.toggleAutoEnhance();
+      refreshToggle();
+      this.notifyChange();
+    });
+    container.add(toggleText);
+
+    const listTop = top + px(64);
+    let rows: Phaser.GameObjects.Container[] = [];
+
+    const rebuildRows = () => {
+      rows.forEach((row) => row.destroy(true));
+      rows = [];
+      const current = this.autoEnhancePriority();
+      current.forEach((unitId, i) => {
+        const unit = this.host.deckPool().find((u) => u.id === unitId);
+        const level = this.enhanceLevels.get(unitId) ?? 0;
+        const y = listTop + i * (rowH + rowGap) + rowH / 2;
+        const row = scene.add.container(panelX, y);
+
+        row.add(
+          scene.add.image(0, 0, roundedRectTexture(scene, panelWidth - px(24), rowH, px(8), 0x1b2033, 0.9, 0x3a3f55, px(1), 'auto-row')),
+        );
+        row.add(
+          scene.add
+            .text(-panelWidth / 2 + px(22), 0, `${i + 1}. ${unit?.name ?? unitId} (강화${level})`, {
+              fontFamily: TITLE_FONT,
+              fontSize: `${px(11.5)}px`,
+              color: '#f0e6c8',
+            })
+            .setOrigin(0, 0.5),
+        );
+
+        const upColor = i === 0 ? '#555555' : '#ffd98a';
+        const upBtn = scene.add
+          .text(panelWidth / 2 - px(54), 0, '▲', { fontFamily: TITLE_FONT, fontSize: `${px(14)}px`, color: upColor })
+          .setOrigin(0.5);
+        if (i > 0) {
+          upBtn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+            const o = this.autoEnhancePriority();
+            [o[i - 1], o[i]] = [o[i], o[i - 1]];
+            this.setAutoEnhancePriority(o);
+            rebuildRows();
+          });
+        }
+        row.add(upBtn);
+
+        const downColor = i === current.length - 1 ? '#555555' : '#ffd98a';
+        const downBtn = scene.add
+          .text(panelWidth / 2 - px(24), 0, '▼', { fontFamily: TITLE_FONT, fontSize: `${px(14)}px`, color: downColor })
+          .setOrigin(0.5);
+        if (i < current.length - 1) {
+          downBtn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+            const o = this.autoEnhancePriority();
+            [o[i], o[i + 1]] = [o[i + 1], o[i]];
+            this.setAutoEnhancePriority(o);
+            rebuildRows();
+          });
+        }
+        row.add(downBtn);
+
+        container.add(row);
+        rows.push(row);
+      });
+    };
+    rebuildRows();
+
+    const closeBtn = scene.add
+      .text(panelX, top + panelHeight - px(20), '닫기', { fontFamily: TITLE_FONT, fontSize: `${px(13)}px`, color: '#ff9a9a' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(8), px(6), px(8), px(6))
+      .on('pointerdown', () => this.closeAutoEnhancePanel());
+    container.add(closeBtn);
+  }
+
+  private closeAutoEnhancePanel(): void {
+    this.autoEnhancePanel?.destroy(true);
+    this.autoEnhancePanel = undefined;
   }
 
   // ----- 유닛 제거 -----

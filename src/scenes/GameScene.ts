@@ -166,6 +166,7 @@ export class GameScene extends Phaser.Scene {
     const dt = (delta / 1000) * this.gameSpeed;
     this.updateMonsters(dt);
     this.updateCombat(dt);
+    this.field.tickAutoEnhance();
 
     if (this.monsters.length >= MAX_MONSTERS_ON_FIELD) {
       this.triggerGameOver();
@@ -803,6 +804,17 @@ export class GameScene extends Phaser.Scene {
         color: '#9fd8ff',
       })
       .setOrigin(0, 0.5);
+
+    this.add
+      .text(width - px(12), headerHeight * 0.78, '⚙자동강화', {
+        fontFamily: TITLE_FONT,
+        fontSize: `${px(13)}px`,
+        color: '#9fe6a0',
+      })
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setPadding(px(6), px(6), px(6), px(6))
+      .on('pointerdown', () => this.field.openAutoEnhancePanel());
 
     this.drawSpeedControls(width / 2, headerHeight * 1.18);
 

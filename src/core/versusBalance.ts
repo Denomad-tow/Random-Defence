@@ -7,7 +7,7 @@
 export const FIELD_SAFETY_CAP = 100;
 
 // 몬스터가 길 끝까지 도달(침투)한 수가 이 값에 도달하면 탈락 처리한다.
-export const MAX_LEAKS = 20;
+export const MAX_LEAKS = 50;
 
 // 몬스터를 잡을 때마다, 이 확률로 살아있는 다른 플레이어 중 한 명에게
 // 몬스터를 하나 보낸다.

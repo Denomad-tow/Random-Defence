@@ -16,7 +16,7 @@ export const STAGE_HP_GROWTH = 1.06;
 // 경우와 감속 효과 때문에 몬스터가 길에서 오래 머물러 쌓이는 경우를 구분하지 못해서, 하나도
 // 안 뚫렸는데 감속만으로 억울하게 지는 문제가 있었다. 이제는 실제로 끝까지 도달한 몬스터
 // 수만 센다.)
-export const MAX_LEAKS = 20;
+export const MAX_LEAKS = 50;
 
 export interface WaveState {
   stage: number;

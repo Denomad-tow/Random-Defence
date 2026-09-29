@@ -4,9 +4,14 @@ import { addBox } from './boxes';
 
 const ATTENDANCE_KEY = 'rd_attendance';
 
+// 보상표를 바꿀 때마다 이 숫자를 1 올린다. 저장된 진행도의 버전이 다르면(예전 보상표 기준으로
+// 쌓인 진행이면) 진행을 초기화해서, 모든 사람이 새 보상표로 오늘부터 다시 1일차를 시작하게 한다.
+const ATTENDANCE_VERSION = 2;
+
 interface AttendanceState {
   lastClaimedDay: number; // 0 = 아직 한 번도 안 받음, 1~7 = 마지막으로 받은 일차
   lastClaimedDate: string; // YYYY-MM-DD, 기기 로컬 날짜 기준
+  version: number;
 }
 
 function todayString(): string {
@@ -17,23 +22,27 @@ function todayString(): string {
   return `${y}-${m}-${day}`;
 }
 
+const DEFAULT_STATE: AttendanceState = { lastClaimedDay: 0, lastClaimedDate: '', version: ATTENDANCE_VERSION };
+
 function loadState(): AttendanceState {
   try {
     const raw = localStorage.getItem(ATTENDANCE_KEY);
-    if (!raw) return { lastClaimedDay: 0, lastClaimedDate: '' };
+    if (!raw) return { ...DEFAULT_STATE };
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.lastClaimedDay === 'number' && typeof parsed.lastClaimedDate === 'string') {
-      return parsed;
+      // 보상표 버전이 다르면(예전 데이터거나 보상표가 바뀌었으면) 진행을 초기화한다.
+      if (parsed.version !== ATTENDANCE_VERSION) return { ...DEFAULT_STATE };
+      return parsed as AttendanceState;
     }
-    return { lastClaimedDay: 0, lastClaimedDate: '' };
+    return { ...DEFAULT_STATE };
   } catch {
-    return { lastClaimedDay: 0, lastClaimedDate: '' };
+    return { ...DEFAULT_STATE };
   }
 }
 
-function saveState(state: AttendanceState): void {
+function saveState(state: Omit<AttendanceState, 'version'>): void {
   try {
-    localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(state));
+    localStorage.setItem(ATTENDANCE_KEY, JSON.stringify({ ...state, version: ATTENDANCE_VERSION }));
   } catch {
     // 저장 공간을 쓸 수 없는 환경(시크릿 모드 등)에서는 조용히 무시한다.
   }
@@ -56,7 +65,7 @@ export function claimAttendance(): { day: number; reward: AttendanceReward } | n
 
   const day = (state.lastClaimedDay % ATTENDANCE_CYCLE_LENGTH) + 1;
   const reward = ATTENDANCE_REWARDS[day - 1];
-  addBox(reward.boxId, reward.count);
+  reward.forEach((item) => addBox(item.boxId, item.count));
   saveState({ lastClaimedDay: day, lastClaimedDate: todayString() });
   addStat('attendanceDays');
   return { day, reward };

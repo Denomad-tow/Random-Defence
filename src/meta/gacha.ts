@@ -13,53 +13,55 @@ export const RARITY_ORDER = ['normal', 'uncommon', 'rare', 'epic', 'legendary', 
 // 이 등급(UR) 이상이 나오면 천장 카운트가 0으로 돌아간다.
 const PITY_RESET_INDEX = RARITY_ORDER.indexOf('mythic');
 
-// 상자마다 나올 수 있는 등급이 다르다. 표에 없는 등급은 그 상자에서 절대 나오지 않는다.
-//   나무: N R SR SSR / 은: N R SR SSR SSSR / 금: R SR SSR SSSR UR / 다이아: SR SSR SSSR UR
-//   플래티넘: SR SSR SSSR UR LR / 미스릴: SSR SSSR UR LR GR / 오리하르콘: SSSR UR LR GR TR
-// 확률(가중치)은 합이 100이 되게 적는다. 값을 바꾸고 싶으면 여기만 고치면 된다.
-// 판 종료 보상으로 어떤 상자를 몇 개 받는지는 meta/rewards.ts에서 정한다.
+// 상자마다 "이 등급 밑으로는 안 나온다"는 하한선만 다르고, 위로는 모든 상자가 최고 등급(TR)까지
+// 나올 수 있다 — 나무 상자에서도 아주 낮은 확률로 TR이 나올 수 있다("전체 상자에서 모든 등급이
+// 나오게" 하기 위함). 하한선: 나무 N부터(전 등급) / 은 R부터(N 제외) / 금 SR부터(N,R 제외)
+//   다이아 SSR부터(N,R,SR 제외) / 플래티넘 SSSR부터(~SSR 제외) / 미스릴 UR부터(~SSSR 제외)
+//   오리하르콘 LR부터(~UR 제외)
+// 확률(가중치)은 합이 100이 되게 적는다. 상자가 좋을수록 낮은 등급 비중이 줄고 높은 등급 비중이 늘어난다.
+// 값을 바꾸고 싶으면 여기만 고치면 된다. 판 종료 보상으로 어떤 상자를 몇 개 받는지는 meta/rewards.ts에서 정한다.
 export const BOX_TYPES: BoxType[] = [
   {
     id: 'wood',
     name: '나무 상자',
     cardCount: 1,
-    weights: { normal: 55, uncommon: 30, rare: 12, epic: 3 },
+    weights: { normal: 55, uncommon: 25, rare: 11, epic: 5, legendary: 2, mythic: 1, lr: 0.6, gr: 0.3, tr: 0.1 },
   },
   {
     id: 'silver',
     name: '은 상자',
     cardCount: 3,
-    weights: { normal: 30, uncommon: 32, rare: 24, epic: 11, legendary: 3 },
+    weights: { uncommon: 50.5, rare: 25, epic: 12.5, legendary: 6.5, mythic: 3, lr: 1.5, gr: 0.75, tr: 0.25 },
   },
   {
     id: 'gold',
     name: '금 상자',
     cardCount: 5,
-    weights: { uncommon: 25, rare: 33, epic: 26, legendary: 12, mythic: 4 },
+    weights: { rare: 46, epic: 25, legendary: 14, mythic: 7.5, lr: 4, gr: 2.2, tr: 1.3 },
   },
   {
     id: 'diamond',
     name: '다이아 상자',
     cardCount: 7,
-    weights: { rare: 30, epic: 40, legendary: 22, mythic: 8 },
+    weights: { epic: 42, legendary: 25, mythic: 15, lr: 9, gr: 5.5, tr: 3.5 },
   },
   {
     id: 'platinum',
     name: '플래티넘 상자',
     cardCount: 8,
-    weights: { rare: 20, epic: 33, legendary: 28, mythic: 15, lr: 4 },
+    weights: { legendary: 40, mythic: 26, lr: 17, gr: 11, tr: 6 },
   },
   {
     id: 'mithril',
     name: '미스릴 상자',
     cardCount: 10,
-    weights: { epic: 22, legendary: 34, mythic: 28, lr: 12, gr: 4 },
+    weights: { mythic: 40, lr: 28, gr: 19, tr: 13 },
   },
   {
     id: 'orichalcum',
     name: '오리하르콘 상자',
     cardCount: 12,
-    weights: { legendary: 30, mythic: 36, lr: 22, gr: 9, tr: 3 },
+    weights: { lr: 43, gr: 33, tr: 24 },
   },
 ];
 

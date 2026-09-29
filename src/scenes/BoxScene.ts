@@ -103,15 +103,18 @@ export class BoxScene extends Phaser.Scene {
         })
         .setOrigin(0, 0.5);
 
+      // 등급이 늘어난 만큼(최대 9종) 한 줄에 다 못 담으니, 글자를 작게 하고 오른쪽 "열기" 버튼과
+      // 겹치지 않도록 그보다 확실히 좁은 폭에서 줄바꿈한다(넓게 잡으면 마지막 글자가 버튼과 겹친다).
       const probText = `${box.cardCount}장 · ` + Object.entries(box.weights)
         .map(([r, w]) => `${getRarity(r).label} ${w}%`)
         .join(' · ');
       this.add
         .text(width * 0.14, y - rowHeight * 0.02, probText, {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(9)}px`,
+          fontSize: `${px(8)}px`,
           color: '#8a8272',
-          wordWrap: { width: width * 0.6 },
+          lineSpacing: px(1),
+          wordWrap: { width: width * 0.58 },
         })
         .setOrigin(0, 0);
 

@@ -755,7 +755,12 @@ export class DeckSelectScene extends Phaser.Scene {
         mithril: '#ffe066',
         orichalcum: '#ffffff',
       };
-      const boxColor = BOX_COLORS[reward.boxId] ?? '#c9a878';
+      // 하루에 상자를 한 종류만 주면 그 상자 이름·색을 그대로 보여주고,
+      // 여러 종류를 섞어 주는 날(7일차)은 "모둠 상자"로 뭉뚱그려 보여준다(칸이 좁아 이름 세 개를 다 못 넣는다).
+      const isAssorted = reward.length > 1;
+      const boxColor = isAssorted ? '#ffe9b0' : (BOX_COLORS[reward[0].boxId] ?? '#c9a878');
+      const boxName = isAssorted ? '모둠 상자' : getBoxType(reward[0].boxId).name.replace(' 상자', '');
+      const countLabel = isAssorted ? '각 1개' : `x${reward[0].count}`;
 
       const cellBg = this.add.graphics().setDepth(602);
       cellBg.fillStyle(isToday ? 0x2a2416 : 0x1c2233, isToday ? 1 : 0.85);
@@ -772,11 +777,10 @@ export class DeckSelectScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(603);
 
-      const boxName = getBoxType(reward.boxId).name.replace(' 상자', '');
       this.add
         .text(x, y + cellSize * 0.02, boxName, {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(boxName.length >= 5 ? 9 : boxName.length >= 4 ? 10 : 12)}px`,
+          fontSize: `${px(boxName.replace(' ', '').length >= 5 ? 9 : boxName.replace(' ', '').length >= 4 ? 10 : 12)}px`,
           color: claimed ? '#6a6458' : boxColor,
           fontStyle: 'bold',
         })
@@ -784,9 +788,9 @@ export class DeckSelectScene extends Phaser.Scene {
         .setDepth(603);
 
       this.add
-        .text(x, y + cellSize * 0.32, `x${reward.count}`, {
+        .text(x, y + cellSize * 0.32, countLabel, {
           fontFamily: TITLE_FONT,
-          fontSize: `${px(11)}px`,
+          fontSize: `${px(isAssorted ? 9.5 : 11)}px`,
           color: claimed ? '#6a6458' : '#f0e9d8',
         })
         .setOrigin(0.5)
@@ -836,7 +840,8 @@ export class DeckSelectScene extends Phaser.Scene {
             // 창을 닫는 경우) 때 주기 저장(20초 간격)이 아직 안 된 상태로 서버의
             // "아직 안 받음" 값이 다시 덮어써서 같은 날 또 받아지는 문제를 막기 위함.
             void flushSnapshot();
-            this.showToast(`${result.day}일차: ${getBoxType(result.reward.boxId).name} ${result.reward.count}개 획득!`);
+            const rewardText = result.reward.map((item) => `${getBoxType(item.boxId).name} ${item.count}개`).join(' · ');
+            this.showToast(`${result.day}일차: ${rewardText} 획득!`);
           }
         });
     }

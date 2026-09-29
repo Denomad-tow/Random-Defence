@@ -10,7 +10,7 @@ import {
   type CellPosition,
 } from '../core/board';
 import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
-import { MAX_MONSTERS_ON_FIELD, GIFT_CHANCE } from '../core/versusBalance';
+import { FIELD_SAFETY_CAP, MAX_LEAKS, GIFT_CHANCE } from '../core/versusBalance';
 import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, type MapPreset } from '../core/mapPresets';
 import { NORMAL_UNITS, type UnitDef } from '../core/units';
@@ -118,6 +118,7 @@ export class VersusGameScene extends Phaser.Scene {
   private boardReady = false;
   private isEliminated = false;
   private isMatchOver = false;
+  private leaks = 0; // 길 끝까지 도달(침투)한 몬스터 수. MAX_LEAKS만큼 쌓이면 탈락.
   private monsterPath!: Phaser.Curves.Path;
   private boardCells: CellPosition[] = [];
   private cellSize = 0;
@@ -161,6 +162,7 @@ export class VersusGameScene extends Phaser.Scene {
     this.boardReady = false;
     this.isEliminated = false;
     this.isMatchOver = false;
+    this.leaks = 0;
     this.waveState = createInitialWaveState();
     this.myMonsters = [];
     this.nextMonsterId = 1;
@@ -251,17 +253,34 @@ export class VersusGameScene extends Phaser.Scene {
 
       const pxPerSec = m.crawlSpeed * this.boardStep * effectiveSpeedMultiplier(m.status);
       const tStep = pathLength > 0 ? (pxPerSec * dt) / pathLength : 0;
-      m.t = Math.min(1, m.t + tStep);
-      const point = this.monsterPath.getPoint(m.t);
+      const t = m.t + tStep;
+
+      if (t >= 1) {
+        this.leakMonster(m);
+        return;
+      }
+
+      m.t = t;
+      const point = this.monsterPath.getPoint(t);
       m.x = point.x;
       m.y = point.y;
       m.sprite.setPosition(point.x, point.y);
     });
 
     this.drawStatusMarks();
+  }
 
-    // 끝까지 도달한 몬스터는 사라지지 않고 필드 끝에 계속 쌓인다(솔로 모드와 동일).
-    if (this.myMonsters.length >= MAX_MONSTERS_ON_FIELD) {
+  // 몬스터가 길 끝까지 도달(침투)했을 때 호출한다. MAX_LEAKS만큼 쌓이면 탈락 처리.
+  private leakMonster(monster: MyMonster): void {
+    monster.sprite.destroy();
+    this.myMonsters = this.myMonsters.filter((m) => m !== monster);
+    this.leaks += 1;
+
+    const endPoint = this.monsterPath.getPoint(1);
+    this.spawnFloatingText(endPoint.x, endPoint.y, '침투!', '#ff6b6b');
+    this.refreshHud();
+
+    if (this.leaks >= MAX_LEAKS) {
       this.eliminateSelf();
     }
   }
@@ -483,6 +502,9 @@ export class VersusGameScene extends Phaser.Scene {
   }
 
   private spawnMonster(): void {
+    // 화면이 몬스터로 너무 붐비면 자리가 빌 때까지 스폰 자체를 건너뛴다(성능 안전장치, 탈락과 무관).
+    if (this.myMonsters.length >= FIELD_SAFETY_CAP) return;
+
     const result = nextSpawn(this.waveState);
     this.waveState = result.nextState;
 
@@ -953,7 +975,7 @@ export class VersusGameScene extends Phaser.Scene {
 
   private refreshHud(): void {
     this.hudText?.setText(
-      `경쟁 전투 (베타) · 스테이지 ${this.waveState.stage} · 몬스터 ${this.myMonsters.length}마리 · 마나 ${this.economy.mana}`,
+      `경쟁 전투 (베타) · 스테이지 ${this.waveState.stage} · 침투 ${this.leaks}/${MAX_LEAKS} · 마나 ${this.economy.mana}`,
     );
     this.field?.refreshActionBar();
   }

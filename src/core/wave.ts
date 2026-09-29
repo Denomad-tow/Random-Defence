@@ -10,6 +10,14 @@ export const STAGES_PER_BOSS = 10;
 // 투자한 만큼 스테이지가 체감되게 올라간다. 그래도 여전히 복리라 후반은 계속 어려워진다.
 export const STAGE_HP_GROWTH = 1.06;
 
+// 몬스터가 길 끝(경로 진행률 t=1)에 닿으면 "침투"로 보고 즉시 없앤다. 침투한 몬스터 수가
+// 이 값에 도달하면 패배(게임 오버) 처리한다.
+// (예전에는 "화면에 동시에 있는 몬스터 수"로 패배를 판정했는데, 몬스터를 못 잡아서 쌓이는
+// 경우와 감속 효과 때문에 몬스터가 길에서 오래 머물러 쌓이는 경우를 구분하지 못해서, 하나도
+// 안 뚫렸는데 감속만으로 억울하게 지는 문제가 있었다. 이제는 실제로 끝까지 도달한 몬스터
+// 수만 센다.)
+export const MAX_LEAKS = 20;
+
 export interface WaveState {
   stage: number;
   spawnedInStage: number;

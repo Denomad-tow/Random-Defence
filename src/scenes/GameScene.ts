@@ -9,7 +9,7 @@ import {
   type BoardLayout,
   type CellPosition,
 } from '../core/board';
-import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
+import { createInitialWaveState, nextSpawn, stageHpMultiplier, MAX_LEAKS, type WaveState } from '../core/wave';
 import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, type MapPreset } from '../core/mapPresets';
 import { NORMAL_UNITS, ROLE_ATTACK_COLORS, type UnitDef, type UnitEffect } from '../core/units';
@@ -57,7 +57,10 @@ import { mountGlobalChat } from '../core/globalChatOverlay';
 const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
 const FIRST_SPAWN_DELAY_MS = 10000;
-const MAX_MONSTERS_ON_FIELD = 100;
+// 감속을 심하게 걸어 몬스터가 오래 쌓이는 극단적인 경우 등, 화면에 동시에 있는 몬스터 수가
+// 너무 많아지면 렌더링 부담을 줄이려고 그 프레임의 스폰만 건너뛴다. 패배와는 무관한 성능
+// 안전장치일 뿐이다 — 실제 패배 기준은 core/wave.ts의 MAX_LEAKS(길 끝까지 도달한 몬스터 수).
+const FIELD_SAFETY_CAP = 100;
 
 type PlacedUnit = PlacedUnitState;
 
@@ -77,6 +80,7 @@ export class GameScene extends Phaser.Scene {
   private spawnTimer?: Phaser.Time.TimerEvent;
   private firstSpawnTimer?: Phaser.Time.TimerEvent;
   private gameOver = false;
+  private leaks = 0;
   private paused = false;
   private pauseContainer?: Phaser.GameObjects.Container;
   private bestStage = 0;
@@ -123,6 +127,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.field.registerDragHandlers();
     this.gameOver = false;
+    this.leaks = 0;
     this.paused = false;
     this.pauseContainer = undefined;
     this.time.paused = false;
@@ -167,10 +172,6 @@ export class GameScene extends Phaser.Scene {
     this.updateMonsters(dt);
     this.updateCombat(dt);
     this.field.tickAutoEnhance();
-
-    if (this.monsters.length >= MAX_MONSTERS_ON_FIELD) {
-      this.triggerGameOver();
-    }
   }
 
   // 일시정지: 몬스터·타이머·연출이 모두 멈춘다. "계속하기"를 누르면 이어진다.
@@ -356,9 +357,14 @@ export class GameScene extends Phaser.Scene {
       const speedMultiplier = effectiveSpeedMultiplier(tickResult.status);
       const pxPerSec = (monster.getData('crawlSpeed') as number) * this.boardStep * speedMultiplier;
       const tStep = pathLength > 0 ? (pxPerSec * dt) / pathLength : 0;
-      const t = Math.min(1, (monster.getData('t') as number) + tStep);
-      monster.setData('t', t);
+      const t = (monster.getData('t') as number) + tStep;
 
+      if (t >= 1) {
+        this.leakMonster(monster);
+        return;
+      }
+
+      monster.setData('t', t);
       const point = this.monsterPath.getPoint(t);
       monster.setPosition(point.x, point.y);
     });
@@ -723,6 +729,22 @@ export class GameScene extends Phaser.Scene {
     this.refreshMana();
   }
 
+  // 몬스터가 길 끝까지 도달(침투)했을 때 호출한다. MAX_LEAKS만큼 쌓이면 패배 처리.
+  private leakMonster(target: Phaser.GameObjects.Image): void {
+    this.monsters = this.monsters.filter((m) => m !== target);
+    target.destroy();
+    this.leaks += 1;
+
+    const endPoint = this.monsterPath.getPoint(1);
+    this.spawnFloatingText(endPoint.x, endPoint.y, '침투!', '#ff6b6b');
+    playSfx('hit');
+    this.refreshStatus();
+
+    if (this.leaks >= MAX_LEAKS) {
+      this.triggerGameOver();
+    }
+  }
+
   private spawnFloatingText(x: number, y: number, message: string, color: string): void {
     fxText(this, x, y, message, color);
   }
@@ -844,7 +866,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshStatus(): void {
-    this.statusText?.setText(`마나 ${this.economy.mana} · 몬스터 ${this.monsters.length}/${MAX_MONSTERS_ON_FIELD}`);
+    this.statusText?.setText(`마나 ${this.economy.mana} · 침투 ${this.leaks}/${MAX_LEAKS}`);
   }
 
   private drawBackground(width: number, height: number): void {
@@ -1199,6 +1221,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnMonster(): void {
+    // 화면이 몬스터로 너무 붐비면(감속을 심하게 걸어 몬스터가 오래 쌓이는 극단적인 경우
+    // 등) 스테이지가 계속 흘러가지 않도록, 자리가 빌 때까지 스폰 자체를 건너뛴다.
+    if (this.monsters.length >= FIELD_SAFETY_CAP) return;
+
     const result = nextSpawn(this.waveState);
     this.waveState = result.nextState;
     this.refreshHud();

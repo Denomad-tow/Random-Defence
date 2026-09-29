@@ -9,7 +9,7 @@ import {
   type BoardLayout,
   type CellPosition,
 } from '../core/board';
-import { createInitialWaveState, nextSpawn, stageHpMultiplier, type WaveState } from '../core/wave';
+import { createInitialWaveState, nextSpawn, stageHpMultiplier, MAX_LEAKS, type WaveState } from '../core/wave';
 import { coopHpMultiplier } from '../core/coopBalance';
 import { MONSTER_KINDS, pickRandomSpecies, type MonsterKindId } from '../core/monsters';
 import { pickRandomMapPreset, MAP_PRESETS, type MapPreset } from '../core/mapPresets';
@@ -87,7 +87,10 @@ const TITLE_FONT = '"Noto Serif KR", serif';
 const SPAWN_INTERVAL_MS = 1100;
 const FIRST_SPAWN_DELAY_MS = 2000;
 const SYNC_INTERVAL_MS = 180;
-const MAX_MONSTERS_ON_FIELD = 100;
+// 감속을 심하게 걸어 몬스터가 오래 쌓이는 극단적인 경우 등, 화면에 동시에 있는 몬스터 수가
+// 너무 많아지면 렌더링 부담을 줄이려고 그 프레임의 스폰만 건너뛴다. 패배와는 무관한 성능
+// 안전장치일 뿐이다 — 실제 패배 기준은 core/wave.ts의 MAX_LEAKS(길 끝까지 도달한 몬스터 수).
+const FIELD_SAFETY_CAP = 100;
 
 interface HostMonster {
   id: number;
@@ -122,6 +125,7 @@ export class CoopGameScene extends Phaser.Scene {
   private isHost = false;
   private boardReady = false;
   private gameOver = false;
+  private leaks = 0; // 길 끝까지 도달(침투)한 몬스터 수(방장만 집계). MAX_LEAKS만큼 쌓이면 패배.
   private monsterPath!: Phaser.Curves.Path;
   private boardCells: CellPosition[] = [];
   private cellSize = 0;
@@ -166,6 +170,7 @@ export class CoopGameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#07080d');
     this.boardReady = false;
     this.gameOver = false;
+    this.leaks = 0;
     this.waveState = createInitialWaveState();
     this.hostMonsters = [];
     this.nextMonsterId = 1;
@@ -273,18 +278,34 @@ export class CoopGameScene extends Phaser.Scene {
 
       const pxPerSec = m.crawlSpeed * this.boardStep * effectiveSpeedMultiplier(m.status);
       const tStep = pathLength > 0 ? (pxPerSec * dt) / pathLength : 0;
-      m.t = Math.min(1, m.t + tStep);
-      const point = this.monsterPath.getPoint(m.t);
+      const t = m.t + tStep;
+
+      if (t >= 1) {
+        this.leakHostMonster(m);
+        return;
+      }
+
+      m.t = t;
+      const point = this.monsterPath.getPoint(t);
       m.x = point.x;
       m.y = point.y;
       m.sprite.setPosition(point.x, point.y);
     });
 
     this.drawRings(this.hostMonsters.map((m) => ({ x: m.x, y: m.y, flags: statusFlags(m.status) })));
+  }
 
-    // 끝까지 도달한 몬스터는 사라지지 않고 필드 끝에 계속 쌓인다(솔로 모드와 동일).
-    // 처치하지 않고 방치하면 결국 자리가 꽉 차서 필드가 뚫린다.
-    if (this.hostMonsters.length >= MAX_MONSTERS_ON_FIELD) {
+  // 몬스터가 길 끝까지 도달(침투)했을 때 호출한다(방장만). MAX_LEAKS만큼 쌓이면 패배 처리.
+  private leakHostMonster(monster: HostMonster): void {
+    monster.sprite.destroy();
+    this.hostMonsters = this.hostMonsters.filter((m) => m !== monster);
+    this.leaks += 1;
+
+    const endPoint = this.monsterPath.getPoint(1);
+    this.spawnFloatingText(endPoint.x, endPoint.y, '침투!', '#ff6b6b');
+    this.refreshHud();
+
+    if (this.leaks >= MAX_LEAKS) {
       this.triggerHostGameOver();
     }
   }
@@ -725,6 +746,9 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private spawnMonster(): void {
+    // 화면이 몬스터로 너무 붐비면 자리가 빌 때까지 스폰 자체를 건너뛴다(성능 안전장치, 패배와 무관).
+    if (this.hostMonsters.length >= FIELD_SAFETY_CAP) return;
+
     const result = nextSpawn(this.waveState);
     this.waveState = result.nextState;
 
@@ -1085,10 +1109,10 @@ export class CoopGameScene extends Phaser.Scene {
   }
 
   private refreshHud(): void {
-    const count = this.isHost ? this.hostMonsters.length : this.guestMonsters.size;
-    this.hudText?.setText(
-      `협동 전투 (베타) · 스테이지 ${this.waveState.stage} · 몬스터 ${count}마리 · 마나 ${this.economy.mana}`,
-    );
+    // 침투 수는 방장만 정확히 알고 있다(방장만 몬스터를 계산). 파티원 화면은 대신
+    // 화면에 떠 있는 몬스터 수를 보여준다(참고용).
+    const middle = this.isHost ? `침투 ${this.leaks}/${MAX_LEAKS}` : `몬스터 ${this.guestMonsters.size}마리`;
+    this.hudText?.setText(`협동 전투 (베타) · 스테이지 ${this.waveState.stage} · ${middle} · 마나 ${this.economy.mana}`);
     this.field?.refreshActionBar();
   }
 
